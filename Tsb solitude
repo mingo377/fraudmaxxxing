@@ -1,5 +1,4 @@
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 local CoreGui = game:GetService("CoreGui")
 
@@ -10,13 +9,12 @@ if parentGui:FindFirstChild("SolitudeSimpleGui") then
 end
 
 ---------------------------------------------------------
--- FRAUDMAXXING AUTOMATIC FRONT-DASH MAGNET
+-- FRAUDMAXXING ONE-TAP COMBO MECHANICS
 ---------------------------------------------------------
 local magnetEnabled = false
 local scriptDelay = 0.1
 local scriptRange = 75
 local isSnapping = false
-local lastSnapTime = 0
 
 -- Find nearest target within range
 local function getNearestTarget()
@@ -42,9 +40,9 @@ local function getNearestTarget()
     return nearest
 end
 
--- Perform Instant Snap
-local function performMagnet()
-    if isSnapping then return end
+-- Perform Instant Snap Combo
+local function performComboSnap()
+    if not magnetEnabled or isSnapping then return end
     
     local character = LocalPlayer.Character
     if not character or not character:FindFirstChild("HumanoidRootPart") then return end
@@ -61,43 +59,16 @@ local function performMagnet()
         local rootPart = character.HumanoidRootPart
         local targetRoot = target.HumanoidRootPart
         
-        -- Instant CFrame teleport right in front of the target
+        -- Instant CFrame teleport right onto/in front of the target
         rootPart.CFrame = targetRoot.CFrame * CFrame.new(0, 0, 2)
         
-        task.wait(0.3)
+        task.wait(0.2)
         isSnapping = false
     end
 end
 
--- Automatic Front Dash Detector (Velocity + Forward Look Vector)
-RunService.RenderStepped:Connect(function()
-    if not magnetEnabled or isSnapping then return end
-    
-    local character = LocalPlayer.Character
-    if not character or not character:FindFirstChild("HumanoidRootPart") or not character:FindFirstChild("Humanoid") then return end
-    
-    local rootPart = character.HumanoidRootPart
-    local humanoid = character.Humanoid
-    
-    local horizontalSpeed = Vector3.new(rootPart.AssemblyLinearVelocity.X, 0, rootPart.AssemblyLinearVelocity.Z).Magnitude
-    
-    -- TSB front dash speed spike threshold
-    if horizontalSpeed > 18 then
-        local moveDir = humanoid.MoveDirection
-        local lookVec = rootPart.CFrame.LookVector
-        
-        -- Confirms forward movement (Front Dash only; side/back dashes are ignored)
-        if moveDir.Magnitude > 0 and moveDir:Dot(lookVec) > 0.3 then
-            if tick() - lastSnapTime > 0.6 then
-                lastSnapTime = tick()
-                task.spawn(performMagnet)
-            end
-        end
-    end
-end)
-
 ---------------------------------------------------------
--- MOBILE UI CREATION (FULLY AUTOMATIC)
+-- MOBILE UI CREATION
 ---------------------------------------------------------
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "SolitudeSimpleGui"
@@ -120,7 +91,29 @@ local hsCorner = Instance.new("UICorner")
 hsCorner.CornerRadius = UDim.new(0, 10)
 hsCorner.Parent = hideShowBtn
 
--- 2. MAIN MENU FRAME
+-- 2. ONE-TAP COMBO BUTTON (Draggable anywhere on screen)
+local comboBtn = Instance.new("TextButton")
+comboBtn.Name = "ComboSnapButton"
+comboBtn.Size = UDim2.new(0, 70, 0, 70)
+comboBtn.Position = UDim2.new(0.82, 0, 0.45, 0)
+comboBtn.BackgroundColor3 = Color3.fromRGB(0, 140, 255)
+comboBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+comboBtn.Text = "DASH\nSNAP"
+comboBtn.TextSize = 14
+comboBtn.Font = Enum.Font.SourceSansBold
+comboBtn.Active = true
+comboBtn.Draggable = true
+comboBtn.Parent = screenGui
+
+local comboCorner = Instance.new("UICorner")
+comboCorner.CornerRadius = UDim.new(0, 35)
+comboCorner.Parent = comboBtn
+
+comboBtn.MouseButton1Click:Connect(function()
+    performComboSnap()
+end)
+
+-- 3. MAIN MENU FRAME
 local frame = Instance.new("Frame")
 frame.Name = "MainFrame"
 frame.Size = UDim2.new(0, 230, 0, 260)
