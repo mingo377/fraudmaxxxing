@@ -11,11 +11,10 @@ if parentGui:FindFirstChild("SolitudeSimpleGui") then
 end
 
 ---------------------------------------------------------
--- DASH HELPER (VELOCITY DETECTION)
+-- TSB LOCK-ON / ORBIT ASSIST LOGIC
 ---------------------------------------------------------
 local dashEnabled = false
-local currentDelay = 0.1
-local isSnapping = false
+local currentDelay = 0.05 -- Slider controls this delay
 
 local function getNearestTarget()
     local character = LocalPlayer.Character
@@ -28,7 +27,7 @@ local function getNearestTarget()
         if obj ~= character and obj:FindFirstChild("HumanoidRootPart") and obj:FindFirstChild("Humanoid") then
             if obj.Humanoid.Health > 0 then
                 local dist = (character.HumanoidRootPart.Position - obj.HumanoidRootPart.Position).Magnitude
-                if dist < shortestDistance and dist <= 45 then -- Target range
+                if dist < shortestDistance and dist <= 50 then -- Lock-on range
                     shortestDistance = dist
                     nearest = obj
                 end
@@ -38,29 +37,25 @@ local function getNearestTarget()
     return nearest
 end
 
--- Automatically detect when you dash by monitoring speed spikes
-RunService.RenderStepped:Connect(function()
-    if not dashEnabled then return end
-    
-    local character = LocalPlayer.Character
-    if not character or not character:FindFirstChild("HumanoidRootPart") then return end
-    
-    local rootPart = character.HumanoidRootPart
-    local horizontalSpeed = Vector3.new(rootPart.AssemblyLinearVelocity.X, 0, rootPart.AssemblyLinearVelocity.Z).Magnitude
-    
-    -- TSB dashes cause a sudden speed spike over 30 studs/s
-    if horizontalSpeed > 30 and not isSnapping then
-        isSnapping = true
-        
-        local target = getNearestTarget()
-        if target and target:FindFirstChild("HumanoidRootPart") then
-            task.wait(currentDelay) -- Respects your slider delay!
-            local targetPos = target.HumanoidRootPart.Position
-            rootPart.CFrame = CFrame.new(rootPart.Position, Vector3.new(targetPos.X, rootPart.Position.Y, targetPos.Z))
+-- Continuous Lock-on Loop respecting the Slider Delay
+task.spawn(function()
+    while true do
+        if dashEnabled then
+            local character = LocalPlayer.Character
+            if character and character:FindFirstChild("HumanoidRootPart") then
+                local target = getNearestTarget()
+                if target and target:FindFirstChild("HumanoidRootPart") then
+                    local rootPart = character.HumanoidRootPart
+                    local targetPos = target.HumanoidRootPart.Position
+                    
+                    -- Continuously lock facing direction toward target for that clean orbit pattern
+                    rootPart.CFrame = CFrame.new(rootPart.Position, Vector3.new(targetPos.X, rootPart.Position.Y, targetPos.Z))
+                end
+            end
+            task.wait(currentDelay) -- Slider directly controls this delay!
+        else
+            task.wait(0.2)
         end
-        
-        task.wait(0.3) -- Cooldown between snaps
-        isSnapping = false
     end
 end)
 
@@ -90,7 +85,7 @@ local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, 0, 0, 30)
 title.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
-title.Text = "Solitude | Dash Helper"
+title.Text = "Solitude | Lock-On Assist"
 title.TextSize = 14
 title.Font = Enum.Font.SourceSansBold
 title.Parent = frame
@@ -106,7 +101,7 @@ toggleButton.Size = UDim2.new(0.85, 0, 0, 35)
 toggleButton.Position = UDim2.new(0.075, 0, 0.3, 0)
 toggleButton.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
 toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-toggleButton.Text = "Dash Helper: OFF"
+toggleButton.Text = "Lock-On: OFF"
 toggleButton.TextSize = 14
 toggleButton.Font = Enum.Font.SourceSansBold
 toggleButton.Parent = frame
@@ -118,21 +113,21 @@ btnCorner.Parent = toggleButton
 toggleButton.MouseButton1Click:Connect(function()
     dashEnabled = not dashEnabled
     if dashEnabled then
-        toggleButton.Text = "Dash Helper: ON"
+        toggleButton.Text = "Lock-On: ON"
         toggleButton.BackgroundColor3 = Color3.fromRGB(40, 180, 40)
     else
-        toggleButton.Text = "Dash Helper: OFF"
+        toggleButton.Text = "Lock-On: OFF"
         toggleButton.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
     end
 end)
 
--- SLIDER (DELAY)
+-- SLIDER (SCRIPT DELAY PROPERTY)
 local sliderLabel = Instance.new("TextLabel")
 sliderLabel.Size = UDim2.new(0.85, 0, 0, 20)
 sliderLabel.Position = UDim2.new(0.075, 0, 0.6, 0)
 sliderLabel.BackgroundTransparency = 1
 sliderLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-sliderLabel.Text = "Magnet Delay: 0.1s"
+sliderLabel.Text = "Script Delay: 0.05s"
 sliderLabel.TextSize = 12
 sliderLabel.Font = Enum.Font.SourceSans
 sliderLabel.Parent = frame
@@ -147,7 +142,7 @@ sliderBg.AutoButtonColor = false
 sliderBg.Parent = frame
 
 local sliderFill = Instance.new("Frame")
-sliderFill.Size = UDim2.new(0.1, 0, 1, 0)
+sliderFill.Size = UDim2.new(0.05, 0, 1, 0)
 sliderFill.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
 sliderFill.BorderSizePixel = 0
 sliderFill.Parent = sliderBg
@@ -157,7 +152,7 @@ sliderBg.MouseButton1Down:Connect(function()
     local relativeX = math.clamp(mouse.X - sliderBg.AbsolutePosition.X, 0, sliderBg.AbsoluteSize.X)
     local percentage = relativeX / sliderBg.AbsoluteSize.X
     
-    currentDelay = math.floor((percentage) * 100) / 100
+    currentDelay = math.floor((percentage * 0.5) * 1000) / 1000 -- Max delay 0.5s
     sliderFill.Size = UDim2.new(percentage, 0, 1, 0)
-    sliderLabel.Text = "Magnet Delay: " .. tostring(currentDelay) .. "s"
+    sliderLabel.Text = "Script Delay: " .. tostring(currentDelay) .. "s"
 end)
