@@ -1,6 +1,5 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 local CoreGui = game:GetService("CoreGui")
 
@@ -12,13 +11,12 @@ if parentGui:FindFirstChild("SolitudeSimpleGui") then
 end
 
 ---------------------------------------------------------
--- DASH HELPER LOGIC VARIABLES
+-- DASH HELPER (VELOCITY DETECTION)
 ---------------------------------------------------------
 local dashEnabled = false
 local currentDelay = 0.1
-local isDashing = false
+local isSnapping = false
 
--- Function to find nearest target (Player or Dummy in TSB)
 local function getNearestTarget()
     local character = LocalPlayer.Character
     if not character or not character:FindFirstChild("HumanoidRootPart") then return nil end
@@ -26,12 +24,11 @@ local function getNearestTarget()
     local nearest = nil
     local shortestDistance = math.huge
     
-    -- Search all entities in workspace
     for _, obj in pairs(workspace:GetChildren()) do
         if obj ~= character and obj:FindFirstChild("HumanoidRootPart") and obj:FindFirstChild("Humanoid") then
             if obj.Humanoid.Health > 0 then
                 local dist = (character.HumanoidRootPart.Position - obj.HumanoidRootPart.Position).Magnitude
-                if dist < shortestDistance and dist <= 35 then -- Max target distance: 35 studs
+                if dist < shortestDistance and dist <= 45 then -- Target range
                     shortestDistance = dist
                     nearest = obj
                 end
@@ -41,31 +38,29 @@ local function getNearestTarget()
     return nearest
 end
 
--- Function to execute dash snap
-local function performDashSnap()
-    if not dashEnabled or isDashing then return end
+-- Automatically detect when you dash by monitoring speed spikes
+RunService.RenderStepped:Connect(function()
+    if not dashEnabled then return end
     
     local character = LocalPlayer.Character
     if not character or not character:FindFirstChild("HumanoidRootPart") then return end
     
-    local target = getNearestTarget()
-    if target and target:FindFirstChild("HumanoidRootPart") then
-        isDashing = true
+    local rootPart = character.HumanoidRootPart
+    local horizontalSpeed = Vector3.new(rootPart.AssemblyLinearVelocity.X, 0, rootPart.AssemblyLinearVelocity.Z).Magnitude
+    
+    -- TSB dashes cause a sudden speed spike over 30 studs/s
+    if horizontalSpeed > 30 and not isSnapping then
+        isSnapping = true
         
-        -- Lock orientation towards target for accurate dash tech
-        local targetPos = target.HumanoidRootPart.Position
-        character.HumanoidRootPart.CFrame = CFrame.new(character.HumanoidRootPart.Position, Vector3.new(targetPos.X, character.HumanoidRootPart.Position.Y, targetPos.Z))
+        local target = getNearestTarget()
+        if target and target:FindFirstChild("HumanoidRootPart") then
+            task.wait(currentDelay) -- Respects your slider delay!
+            local targetPos = target.HumanoidRootPart.Position
+            rootPart.CFrame = CFrame.new(rootPart.Position, Vector3.new(targetPos.X, rootPart.Position.Y, targetPos.Z))
+        end
         
-        task.wait(currentDelay)
-        isDashing = false
-    end
-end
-
--- Detect when user dashes (Q key on PC, or Dash Action Button on Mobile)
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    if input.KeyCode == Enum.KeyCode.Q or input.UserInputType == Enum.UserInputType.Touch then
-        performDashSnap()
+        task.wait(0.3) -- Cooldown between snaps
+        isSnapping = false
     end
 end)
 
