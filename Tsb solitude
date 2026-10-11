@@ -10,102 +10,129 @@ if parentGui:FindFirstChild("SolitudeSimpleGui") then
 end
 
 ---------------------------------------------------------
--- FRAUDMAXXING FIXED SOLITUDE PATTERN (WORKSPACE.LIVE)
+-- KITTYWARE DEOBFUSCATED LOOP DASH & AUTO-TECH LOGIC
 ---------------------------------------------------------
 local magnetEnabled = false
 local scriptDelay = 0.1
 local scriptRange = 75
 local isExecuting = false
 
--- Exact TSB Remote Input Table (From KittyWare mechanics)[span_3](start_span)[span_3](end_span)
+-- Animation IDs used by KittyWare / TSB for M1 hits[span_4](start_span)[span_4](end_span)
+local animIdHit1 = "10503381238"
+local animIdHit2 = "13379003796"
+
+-- TSB Remote Input Table from KittyWare[span_5](start_span)[span_5](end_span)
 local frontDashData = {
     Dash = Enum.KeyCode.W,
     Key = Enum.KeyCode.Q,
     Goal = "KeyPress",
 }
 
--- Correct Target Finder looking inside workspace.Live (TSB standard)[span_4](start_span)[span_4](end_span)
-local function getNearestTarget()
-    local character = LocalPlayer.Character
-    if not character or not character:FindFirstChild("HumanoidRootPart") then return nil end
-    
-    local nearest = nil
-    local shortestDistance = math.huge
-    
+-- Target Finder from workspace.Live[span_6](start_span)[span_6](end_span)
+local function getTargetByName(name)
     local liveFolder = workspace:FindFirstChild("Live")
     if not liveFolder then return nil end
-    
     for _, obj in ipairs(liveFolder:GetChildren()) do
-        if obj ~= character and obj:IsA("Model") then
-            local hrp = obj:FindFirstChild("HumanoidRootPart")
-            local hum = obj:FindFirstChild("Humanoid")
-            if hrp and hum and hum.Health > 0 then
-                local dist = (character.HumanoidRootPart.Position - hrp.Position).Magnitude
-                if dist < shortestDistance and dist <= scriptRange then
-                    shortestDistance = dist
-                    nearest = obj
+        if obj.Name == name and obj:FindFirstChild("HumanoidRootPart") then
+            return obj
+        end
+    end
+    return nil
+end
+
+-- Exact KittyWare Loop Dash Implementation[span_7](start_span)[span_7](end_span)
+local function executeKittyWareLoopDash(targetModel, targetRoot)
+    if isExecuting then return end
+    isExecuting = true
+    
+    local character = LocalPlayer.Character
+    if not character or not character:FindFirstChild("HumanoidRootPart") then 
+        isExecuting = false
+        return 
+    end
+    
+    local communicate = character:FindFirstChild("Communicate")
+    local rootPart = character.HumanoidRootPart
+    
+    if scriptDelay > 0 then
+        task.wait(scriptDelay)
+    end
+    
+    -- 1. Fire Front Dash via TSB Remote[span_8](start_span)[span_8](end_span)
+    if communicate then
+        communicate:FireServer(frontDashData)
+    end
+    
+    -- 2. Execute KittyWare Loop Arc Trajectory via RenderStepped[span_9](start_span)[span_9](end_span)
+    local startTime = tick()
+    local duration = 0.35
+    local connection
+    
+    connection = RunService.RenderStepped:Connect(function()
+        local elapsed = tick() - startTime
+        local alpha = elapsed / duration
+        
+        if alpha >= 1 or not targetRoot.Parent or not rootPart.Parent then
+            if connection then connection:Disconnect() end
+            isExecuting = false
+            return
+        end
+        
+        -- Smooth orbital arc calculation around target
+        local angle = alpha * math.pi * 1.75
+        local radius = 30
+        local offsetX = math.cos(angle) * radius
+        local offsetZ = math.sin(angle) * radius
+        
+        local targetPos = targetRoot.Position
+        local newPos = targetPos + Vector3.new(offsetX, 1.5, offsetZ)
+        
+        -- Pivot character smoothly while facing target[span_10](start_span)[span_10](end_span)
+        rootPart.CFrame = CFrame.new(newPos, targetPos)
+    end)
+end
+
+-- Automatic Animation Listener Hook (Directly from KittyWare source)[span_11](start_span)[span_11](end_span)
+local function setupKittyWareHooks(char)
+    local humanoid = char:WaitForChild("Humanoid", 5)
+    if not humanoid then return end
+    
+    local animator = humanoid:WaitForChild("Animator", 5)
+    if not animator then return end
+    
+    animator.AnimationPlayed:Connect(function(track)
+        if not magnetEnabled or isExecuting then return end
+        
+        local anim = track.Animation
+        if not anim then return end
+        
+        local animId = anim.AnimationId
+        -- Check if the played animation matches TSB M1 landing animations[span_12](start_span)[span_12](end_span)
+        if animId == "rbxassetid://" .. animIdHit1 or animId == "rbxassetid://" .. animIdHit2 then
+            local lastHitAttr = char:GetAttribute("LastM1Hitted")
+            if not lastHitAttr then return end
+            
+            -- Extract target name from attribute string format[span_13](start_span)[span_13](end_span)
+            local targetName = lastHitAttr:match("^(.-);;")
+            if not targetName then return end
+            
+            local targetModel = getTargetByName(targetName)
+            if targetModel and targetModel:FindFirstChild("HumanoidRootPart") then
+                local dist = (char.HumanoidRootPart.Position - targetModel.HumanoidRootPart.Position).Magnitude
+                if dist <= scriptRange then
+                    task.spawn(function()
+                        executeKittyWareLoopDash(targetModel, targetModel.HumanoidRootPart)
+                    end)
                 end
             end
         end
-    end
-    return nearest
+    end)
 end
 
--- Execute Solitude Pattern using Direct Remote Firing + Orbit Trajectory
-local function performSolitudePattern()
-    if not magnetEnabled or isExecuting then return end
-    
-    local character = LocalPlayer.Character
-    if not character or not character:FindFirstChild("HumanoidRootPart") then return end
-    
-    local communicate = character:FindFirstChild("Communicate")
-    local target = getNearestTarget()
-    
-    if communicate and target and target:FindFirstChild("HumanoidRootPart") then
-        isExecuting = true
-        
-        -- Respect your custom script delay slider/textbox value
-        if scriptDelay > 0 then
-            task.wait(scriptDelay)
-        end
-        
-        -- Directly trigger the dash via TSB remote[span_5](start_span)[span_5](end_span)
-        communicate:FireServer(frontDashData)
-        
-        local rootPart = character.HumanoidRootPart
-        local targetRoot = target.HumanoidRootPart
-        
-        -- Solitude Circular Orbit Arc Pattern
-        local radius = 35
-        local duration = 0.25
-        local startTime = tick()
-        
-        local connection
-        connection = RunService.RenderStepped:Connect(function()
-            local elapsed = tick() - startTime
-            local alpha = elapsed / duration
-            
-            if alpha >= 1 or not targetRoot.Parent then
-                connection:Disconnect()
-                isExecuting = false
-                return
-            end
-            
-            -- Calculate orbital arc trajectory around target
-            local angle = alpha * math.pi * 1.5
-            local offsetX = math.cos(angle) * radius
-            local offsetZ = math.sin(angle) * radius
-            
-            local targetPos = targetRoot.Position
-            local newPos = targetPos + Vector3.new(offsetX, 1.5, offsetZ)
-            
-            -- Instantly snap and face target during pattern execution
-            rootPart.CFrame = CFrame.new(newPos, targetPos)
-        end)
-    else
-        print("Fraudmaxxing Debug: No target found in workspace.Live or Communicate missing!")
-    end
+if LocalPlayer.Character then
+    setupKittyWareHooks(LocalPlayer.Character)
 end
+LocalPlayer.CharacterAdded:Connect(setupKittyWareHooks)
 
 ---------------------------------------------------------
 -- MOBILE UI CREATION
@@ -115,7 +142,7 @@ screenGui.Name = "SolitudeSimpleGui"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = parentGui
 
--- 1. FLOATING SHOW/HIDE MENU BUTTON ("UI")
+-- Floating Show/Hide Menu Button ("UI")
 local hideShowBtn = Instance.new("TextButton")
 hideShowBtn.Name = "HideShowButton"
 hideShowBtn.Size = UDim2.new(0, 50, 0, 50)
@@ -131,29 +158,7 @@ local hsCorner = Instance.new("UICorner")
 hsCorner.CornerRadius = UDim.new(0, 10)
 hsCorner.Parent = hideShowBtn
 
--- 2. DEDICATED MOBILE PATTERN TRIGGER BUTTON (Draggable)
-local patternBtn = Instance.new("TextButton")
-patternBtn.Name = "PatternTriggerButton"
-patternBtn.Size = UDim2.new(0, 70, 0, 70)
-patternBtn.Position = UDim2.new(0.82, 0, 0.45, 0)
-patternBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 255)
-patternBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-patternBtn.Text = "SOLITUDE\nTECH"
-patternBtn.TextSize = 12
-patternBtn.Font = Enum.Font.SourceSansBold
-patternBtn.Active = true
-patternBtn.Draggable = true
-patternBtn.Parent = screenGui
-
-local patCorner = Instance.new("UICorner")
-patCorner.CornerRadius = UDim.new(0, 35)
-patCorner.Parent = patternBtn
-
-patternBtn.MouseButton1Click:Connect(function()
-    performSolitudePattern()
-end)
-
--- 3. MAIN MENU FRAME
+-- Main Menu Frame
 local frame = Instance.new("Frame")
 frame.Name = "MainFrame"
 frame.Size = UDim2.new(0, 230, 0, 260)
@@ -294,6 +299,7 @@ boxCorner2.CornerRadius = UDim.new(0, 4)
 boxCorner2.Parent = rangeTextBox
 
 local rangeSliderBg = Instance.new("TextButton")
+rangeSliderBg.Size = UDim2.85 -- keeping standard styling layout proportions
 rangeSliderBg.Size = UDim2.new(0.85, 0, 0, 12)
 rangeSliderBg.Position = UDim2.new(0.075, 0, 0.70, 0)
 rangeSliderBg.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
@@ -309,7 +315,7 @@ rangeSliderFill.Parent = rangeSliderBg
 
 local function updateRange(val)
     scriptRange = math.clamp(tonumber(val) or 75, 10, 100)
-    rangeTextBox.Text = tostring(rangeTextBox.Text)
+    rangeTextBox.Text = tostring(scriptRange)
     local pct = (scriptRange - 10) / (100 - 10)
     rangeSliderFill.Size = UDim2.new(pct, 0, 1, 0)
 end
@@ -322,4 +328,4 @@ rangeSliderBg.MouseButton1Down:Connect(function()
     updateRange(math.floor(10 + (percentage * (100 - 10))))
 end)
 
-print("Fraudmaxxing v1-By mingo loaded with workspace.Live Target Scanner!")
+print("Fraudmaxxing v1-By mingo loaded with KittyWare Loop Dash Automation!")
