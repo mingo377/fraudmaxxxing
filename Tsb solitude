@@ -1,5 +1,5 @@
 local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 local CoreGui = game:GetService("CoreGui")
 
@@ -10,12 +10,13 @@ if parentGui:FindFirstChild("SolitudeSimpleGui") then
 end
 
 ---------------------------------------------------------
--- FRAUDMAXXING MAGNET MECHANICS (MOBILE TRIGGER)
+-- FRAUDMAXXING AUTOMATIC FRONT-DASH MAGNET
 ---------------------------------------------------------
 local magnetEnabled = false
 local scriptDelay = 0.1
 local scriptRange = 75
-local isTweening = false
+local isSnapping = false
+local lastSnapTime = 0
 
 -- Find nearest target within range
 local function getNearestTarget()
@@ -25,10 +26,12 @@ local function getNearestTarget()
     local nearest = nil
     local shortestDistance = math.huge
     
-    for _, obj in pairs(workspace:GetChildren()) do
-        if obj ~= character and obj:FindFirstChild("HumanoidRootPart") and obj:FindFirstChild("Humanoid") then
-            if obj.Humanoid.Health > 0 then
-                local dist = (character.HumanoidRootPart.Position - obj.HumanoidRootPart.Position).Magnitude
+    for _, obj in ipairs(workspace:GetChildren()) do
+        if obj ~= character and obj:IsA("Model") then
+            local hrp = obj:FindFirstChild("HumanoidRootPart")
+            local hum = obj:FindFirstChild("Humanoid")
+            if hrp and hum and hum.Health > 0 then
+                local dist = (character.HumanoidRootPart.Position - hrp.Position).Magnitude
                 if dist < shortestDistance and dist <= scriptRange then
                     shortestDistance = dist
                     nearest = obj
@@ -39,18 +42,18 @@ local function getNearestTarget()
     return nearest
 end
 
--- Perform the Magnet Action
+-- Perform Instant Snap
 local function performMagnet()
-    if not magnetEnabled or isTweening then return end
+    if isSnapping then return end
     
     local character = LocalPlayer.Character
     if not character or not character:FindFirstChild("HumanoidRootPart") then return end
     
     local target = getNearestTarget()
     if target and target:FindFirstChild("HumanoidRootPart") then
-        isTweening = true
+        isSnapping = true
         
-        -- Respect your custom script delay
+        -- Respect your custom script delay slider/textbox value
         if scriptDelay > 0 then
             task.wait(scriptDelay)
         end
@@ -58,21 +61,43 @@ local function performMagnet()
         local rootPart = character.HumanoidRootPart
         local targetRoot = target.HumanoidRootPart
         
-        -- Smooth tween right onto the target torso/head
-        local destination = targetRoot.CFrame * CFrame.new(0, 1.5, -1.5)
-        local tweenInfo = TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-        local tween = TweenService:Create(rootPart, tweenInfo, {CFrame = destination})
+        -- Instant CFrame teleport right in front of the target
+        rootPart.CFrame = targetRoot.CFrame * CFrame.new(0, 0, 2)
         
-        tween:Play()
-        tween.Completed:Wait()
-        
-        task.wait(0.15)
-        isTweening = false
+        task.wait(0.3)
+        isSnapping = false
     end
 end
 
+-- Automatic Front Dash Detector (Velocity + Forward Look Vector)
+RunService.RenderStepped:Connect(function()
+    if not magnetEnabled or isSnapping then return end
+    
+    local character = LocalPlayer.Character
+    if not character or not character:FindFirstChild("HumanoidRootPart") or not character:FindFirstChild("Humanoid") then return end
+    
+    local rootPart = character.HumanoidRootPart
+    local humanoid = character.Humanoid
+    
+    local horizontalSpeed = Vector3.new(rootPart.AssemblyLinearVelocity.X, 0, rootPart.AssemblyLinearVelocity.Z).Magnitude
+    
+    -- TSB front dash speed spike threshold
+    if horizontalSpeed > 18 then
+        local moveDir = humanoid.MoveDirection
+        local lookVec = rootPart.CFrame.LookVector
+        
+        -- Confirms forward movement (Front Dash only; side/back dashes are ignored)
+        if moveDir.Magnitude > 0 and moveDir:Dot(lookVec) > 0.3 then
+            if tick() - lastSnapTime > 0.6 then
+                lastSnapTime = tick()
+                task.spawn(performMagnet)
+            end
+        end
+    end
+end)
+
 ---------------------------------------------------------
--- MOBILE UI CREATION
+-- MOBILE UI CREATION (FULLY AUTOMATIC)
 ---------------------------------------------------------
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "SolitudeSimpleGui"
@@ -95,29 +120,7 @@ local hsCorner = Instance.new("UICorner")
 hsCorner.CornerRadius = UDim.new(0, 10)
 hsCorner.Parent = hideShowBtn
 
--- 2. DEDICATED MOBILE MAGNET TRIGGER BUTTON (Tap this like the 'E' key!)
-local actionBtn = Instance.new("TextButton")
-actionBtn.Name = "ActionMagnetButton"
-actionBtn.Size = UDim2.new(0, 65, 0, 65)
-actionBtn.Position = UDim2.new(0.82, 0, 0.45, 0) -- Placed near mobile attack buttons
-actionBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
-actionBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-actionBtn.Text = "SNAP"
-actionBtn.TextSize = 14
-actionBtn.Font = Enum.Font.SourceSansBold
-actionBtn.Active = true
-actionBtn.Draggable = true -- You can drag this button wherever your thumb likes it best!
-actionBtn.Parent = screenGui
-
-local actCorner = Instance.new("UICorner")
-actCorner.CornerRadius = UDim.new(0, 32)
-actCorner.Parent = actionBtn
-
-actionBtn.MouseButton1Click:Connect(function()
-    performMagnet()
-end)
-
--- 3. MAIN MENU FRAME
+-- 2. MAIN MENU FRAME
 local frame = Instance.new("Frame")
 frame.Name = "MainFrame"
 frame.Size = UDim2.new(0, 230, 0, 260)
