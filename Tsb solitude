@@ -1,26 +1,23 @@
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer
 local CoreGui = game:GetService("CoreGui")
 
 local parentGui = (gethui and gethui()) or CoreGui or LocalPlayer:WaitForChild("PlayerGui")
 
--- Remove old GUI if re-executed
 if parentGui:FindFirstChild("SolitudeSimpleGui") then
     parentGui.SolitudeSimpleGui:Destroy()
 end
 
 ---------------------------------------------------------
--- TSB FRONT DASH MAGNET MECHANICS
+-- FRAUDMAXXING MAGNET MECHANICS (MOBILE TRIGGER)
 ---------------------------------------------------------
 local magnetEnabled = false
 local scriptDelay = 0.1
-local scriptRange = 75 -- Adjustable range (10 to 100 studs)
+local scriptRange = 75
 local isTweening = false
-local lastMagnetTick = 0
 
--- Find nearest target within dynamic range
+-- Find nearest target within range
 local function getNearestTarget()
     local character = LocalPlayer.Character
     if not character or not character:FindFirstChild("HumanoidRootPart") then return nil end
@@ -42,9 +39,9 @@ local function getNearestTarget()
     return nearest
 end
 
--- Perform Magnet Tween
+-- Perform the Magnet Action
 local function performMagnet()
-    if isTweening or not magnetEnabled then return end
+    if not magnetEnabled or isTweening then return end
     
     local character = LocalPlayer.Character
     if not character or not character:FindFirstChild("HumanoidRootPart") then return end
@@ -53,6 +50,7 @@ local function performMagnet()
     if target and target:FindFirstChild("HumanoidRootPart") then
         isTweening = true
         
+        -- Respect your custom script delay
         if scriptDelay > 0 then
             task.wait(scriptDelay)
         end
@@ -60,53 +58,28 @@ local function performMagnet()
         local rootPart = character.HumanoidRootPart
         local targetRoot = target.HumanoidRootPart
         
-        local destination = targetRoot.CFrame * CFrame.new(0, 1.5, -2)
-        local tweenInfo = TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        -- Smooth tween right onto the target torso/head
+        local destination = targetRoot.CFrame * CFrame.new(0, 1.5, -1.5)
+        local tweenInfo = TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
         local tween = TweenService:Create(rootPart, tweenInfo, {CFrame = destination})
         
         tween:Play()
         tween.Completed:Wait()
         
-        task.wait(0.25)
+        task.wait(0.15)
         isTweening = false
     end
 end
 
--- Front Dash Detection Tracker
-RunService.RenderStepped:Connect(function()
-    if not magnetEnabled or isTweening then return end
-    
-    local character = LocalPlayer.Character
-    if not character or not character:FindFirstChild("HumanoidRootPart") or not character:FindFirstChild("Humanoid") then return end
-    
-    local rootPart = character.HumanoidRootPart
-    local humanoid = character.Humanoid
-    
-    local horizontalSpeed = Vector3.new(rootPart.AssemblyLinearVelocity.X, 0, rootPart.AssemblyLinearVelocity.Z).Magnitude
-    
-    if horizontalSpeed > 12 then
-        local moveDir = humanoid.MoveDirection
-        local lookVec = rootPart.CFrame.LookVector
-        
-        -- Front Dash check (ignoring side/back dashes)
-        if moveDir.Magnitude > 0 and moveDir:Dot(lookVec) > 0.4 then
-            if tick() - lastMagnetTick > 0.4 then
-                lastMagnetTick = tick()
-                task.spawn(performMagnet)
-            end
-        end
-    end
-end)
-
 ---------------------------------------------------------
--- NATIVE MOBILE UI CREATION
+-- MOBILE UI CREATION
 ---------------------------------------------------------
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "SolitudeSimpleGui"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = parentGui
 
--- Floating UI Button
+-- 1. FLOATING SHOW/HIDE MENU BUTTON ("UI")
 local hideShowBtn = Instance.new("TextButton")
 hideShowBtn.Name = "HideShowButton"
 hideShowBtn.Size = UDim2.new(0, 50, 0, 50)
@@ -122,7 +95,29 @@ local hsCorner = Instance.new("UICorner")
 hsCorner.CornerRadius = UDim.new(0, 10)
 hsCorner.Parent = hideShowBtn
 
--- Main GUI Frame (Expanded height to fit Range controls)
+-- 2. DEDICATED MOBILE MAGNET TRIGGER BUTTON (Tap this like the 'E' key!)
+local actionBtn = Instance.new("TextButton")
+actionBtn.Name = "ActionMagnetButton"
+actionBtn.Size = UDim2.new(0, 65, 0, 65)
+actionBtn.Position = UDim2.new(0.82, 0, 0.45, 0) -- Placed near mobile attack buttons
+actionBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
+actionBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+actionBtn.Text = "SNAP"
+actionBtn.TextSize = 14
+actionBtn.Font = Enum.Font.SourceSansBold
+actionBtn.Active = true
+actionBtn.Draggable = true -- You can drag this button wherever your thumb likes it best!
+actionBtn.Parent = screenGui
+
+local actCorner = Instance.new("UICorner")
+actCorner.CornerRadius = UDim.new(0, 32)
+actCorner.Parent = actionBtn
+
+actionBtn.MouseButton1Click:Connect(function()
+    performMagnet()
+end)
+
+-- 3. MAIN MENU FRAME
 local frame = Instance.new("Frame")
 frame.Name = "MainFrame"
 frame.Size = UDim2.new(0, 230, 0, 260)
@@ -157,7 +152,7 @@ local titleCorner = Instance.new("UICorner")
 titleCorner.CornerRadius = UDim.new(0, 8)
 titleCorner.Parent = title
 
--- Toggle Magnet Button
+-- Magnet Toggle Button
 local toggleButton = Instance.new("TextButton")
 toggleButton.Size = UDim2.new(0.85, 0, 0, 32)
 toggleButton.Position = UDim2.new(0.075, 0, 0.15, 0)
@@ -183,7 +178,7 @@ toggleButton.MouseButton1Click:Connect(function()
     end
 end)
 
--- 1. DELAY CONTROLS (0.1 to 2.0s)
+-- Delay Controls
 local delayLabel = Instance.new("TextLabel")
 delayLabel.Size = UDim2.new(0.5, 0, 0, 18)
 delayLabel.Position = UDim2.new(0.075, 0, 0.32, 0)
@@ -229,19 +224,15 @@ local function updateDelay(val)
     delaySliderFill.Size = UDim2.new(pct, 0, 1, 0)
 end
 
-delayTextBox.FocusLost:Connect(function()
-    updateDelay(delayTextBox.Text)
-end)
-
+delayTextBox.FocusLost:Connect(function() updateDelay(delayTextBox.Text) end)
 delaySliderBg.MouseButton1Down:Connect(function()
     local mouse = LocalPlayer:GetMouse()
     local relativeX = math.clamp(mouse.X - delaySliderBg.AbsolutePosition.X, 0, delaySliderBg.AbsoluteSize.X)
     local percentage = relativeX / delaySliderBg.AbsoluteSize.X
-    local calculatedVal = 0.1 + (percentage * (2.0 - 0.1))
-    updateDelay(string.format("%.2f", calculatedVal))
+    updateDelay(string.format("%.2f", 0.1 + (percentage * (2.0 - 0.1))))
 end)
 
--- 2. RANGE CONTROLS (10 to 100 studs)
+-- Range Controls
 local rangeLabel = Instance.new("TextLabel")
 rangeLabel.Size = UDim2.new(0.5, 0, 0, 18)
 rangeLabel.Position = UDim2.new(0.075, 0, 0.58, 0)
@@ -275,7 +266,7 @@ rangeSliderBg.AutoButtonColor = false
 rangeSliderBg.Parent = frame
 
 local rangeSliderFill = Instance.new("Frame")
-rangeSliderFill.Size = UDim2.new(0.72, 0, 1, 0) -- default for 75 out of 100
+rangeSliderFill.Size = UDim2.new(0.72, 0, 1, 0)
 rangeSliderFill.BackgroundColor3 = Color3.fromRGB(215, 120, 0)
 rangeSliderFill.BorderSizePixel = 0
 rangeSliderFill.Parent = rangeSliderBg
@@ -287,14 +278,10 @@ local function updateRange(val)
     rangeSliderFill.Size = UDim2.new(pct, 0, 1, 0)
 end
 
-rangeTextBox.FocusLost:Connect(function()
-    updateRange(rangeTextBox.Text)
-end)
-
+rangeTextBox.FocusLost:Connect(function() updateRange(rangeTextBox.Text) end)
 rangeSliderBg.MouseButton1Down:Connect(function()
     local mouse = LocalPlayer:GetMouse()
     local relativeX = math.clamp(mouse.X - rangeSliderBg.AbsolutePosition.X, 0, rangeSliderBg.AbsoluteSize.X)
     local percentage = relativeX / rangeSliderBg.AbsoluteSize.X
-    local calculatedVal = 10 + (percentage * (100 - 10))
-    updateRange(math.floor(calculatedVal))
+    updateRange(math.floor(10 + (percentage * (100 - 10))))
 end)
