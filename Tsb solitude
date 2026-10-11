@@ -1,45 +1,45 @@
--- 1. Print test to confirm execution
-print("Solitude script started!")
-
--- 2. Load the Orion UI Library
+-- Load the Orion UI Library
 local OrionLib = loadstring(game:HttpGet('https://raw.githubusercontent.com/shlexware/Orion/main/source'))()
 
--- 3. Create the Window Menu
+-- Create the Main Window
 local Window = OrionLib:MakeWindow({
-    Name = "Solitude Dash Helper",
+    Name = "Solitude | Dash Helper",
     HidePremium = false,
     SaveConfig = true,
     ConfigFolder = "SolitudeConfig"
 })
 
--- 4. Create a Tab
+-- Create a Tab
 local Tab = Window:MakeTab({
-    Name = "Main",
+    Name = "Main Controls",
     Icon = "rbxassetid://4483345998",
     PremiumOnly = false
 })
 
--- 5. Add a Toggle
+-- Add a Toggle
 Tab:AddToggle({
-    Name = "Solitude Dash Helper",
+    Name = "Dash Helper Enabled",
     Default = false,
     Callback = function(Value)
         print("Dash helper toggled:", Value)
+        -- Your dash helper code logic goes here
     end    
 })
 
--- 6. Add a Slider for Delay
+-- Add a Slider
 Tab:AddSlider({
-    Name = "Magnet Delay",
+    Name = "Dash Delay",
     Min = 0,
     Max = 1,
     Default = 0.1,
+    Color = Color3.fromRGB(255,255,255),
     Increment = 0.05,
     ValueName = "Seconds",
     Callback = function(Value)
         print("Delay set to:", Value)
+        -- Your delay logic goes here
     end    
 })
 
--- Initialize UI
+-- Initialize the UI
 OrionLib:Init()
