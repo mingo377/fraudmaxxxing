@@ -12,14 +12,15 @@ if parentGui:FindFirstChild("SolitudeSimpleGui") then
 end
 
 ---------------------------------------------------------
--- FRONT-DASH MAGNET MECHANICS
+-- TSB FRONT DASH MAGNET MECHANICS
 ---------------------------------------------------------
 local magnetEnabled = false
 local scriptDelay = 0.1
+local scriptRange = 75 -- Adjustable range (10 to 100 studs)
 local isTweening = false
-local lastDashTime = 0
+local lastMagnetTick = 0
 
--- Find nearest target (Player or Dummy)
+-- Find nearest target within dynamic range
 local function getNearestTarget()
     local character = LocalPlayer.Character
     if not character or not character:FindFirstChild("HumanoidRootPart") then return nil end
@@ -31,7 +32,7 @@ local function getNearestTarget()
         if obj ~= character and obj:FindFirstChild("HumanoidRootPart") and obj:FindFirstChild("Humanoid") then
             if obj.Humanoid.Health > 0 then
                 local dist = (character.HumanoidRootPart.Position - obj.HumanoidRootPart.Position).Magnitude
-                if dist < shortestDistance and dist <= 75 then
+                if dist < shortestDistance and dist <= scriptRange then
                     shortestDistance = dist
                     nearest = obj
                 end
@@ -43,7 +44,7 @@ end
 
 -- Perform Magnet Tween
 local function performMagnet()
-    if isTweening then return end
+    if isTweening or not magnetEnabled then return end
     
     local character = LocalPlayer.Character
     if not character or not character:FindFirstChild("HumanoidRootPart") then return end
@@ -59,19 +60,19 @@ local function performMagnet()
         local rootPart = character.HumanoidRootPart
         local targetRoot = target.HumanoidRootPart
         
-        local destination = targetRoot.CFrame * CFrame.new(0, 2, -1)
+        local destination = targetRoot.CFrame * CFrame.new(0, 1.5, -2)
         local tweenInfo = TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
         local tween = TweenService:Create(rootPart, tweenInfo, {CFrame = destination})
         
         tween:Play()
         tween.Completed:Wait()
         
-        task.wait(0.3)
+        task.wait(0.25)
         isTweening = false
     end
 end
 
--- Front Dash Detection Logic
+-- Front Dash Detection Tracker
 RunService.RenderStepped:Connect(function()
     if not magnetEnabled or isTweening then return end
     
@@ -83,14 +84,14 @@ RunService.RenderStepped:Connect(function()
     
     local horizontalSpeed = Vector3.new(rootPart.AssemblyLinearVelocity.X, 0, rootPart.AssemblyLinearVelocity.Z).Magnitude
     
-    if horizontalSpeed > 28 then
+    if horizontalSpeed > 12 then
         local moveDir = humanoid.MoveDirection
         local lookVec = rootPart.CFrame.LookVector
         
-        -- Forward direction check (Front Dash only)
+        -- Front Dash check (ignoring side/back dashes)
         if moveDir.Magnitude > 0 and moveDir:Dot(lookVec) > 0.4 then
-            if tick() - lastDashTime > 0.5 then
-                lastDashTime = tick()
+            if tick() - lastMagnetTick > 0.4 then
+                lastMagnetTick = tick()
                 task.spawn(performMagnet)
             end
         end
@@ -121,10 +122,10 @@ local hsCorner = Instance.new("UICorner")
 hsCorner.CornerRadius = UDim.new(0, 10)
 hsCorner.Parent = hideShowBtn
 
--- Main GUI Frame
+-- Main GUI Frame (Expanded height to fit Range controls)
 local frame = Instance.new("Frame")
 frame.Name = "MainFrame"
-frame.Size = UDim2.new(0, 230, 0, 195)
+frame.Size = UDim2.new(0, 230, 0, 260)
 frame.Position = UDim2.new(0.1, 0, 0.25, 0)
 frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 frame.BorderSizePixel = 0
@@ -158,8 +159,8 @@ titleCorner.Parent = title
 
 -- Toggle Magnet Button
 local toggleButton = Instance.new("TextButton")
-toggleButton.Size = UDim2.new(0.85, 0, 0, 35)
-toggleButton.Position = UDim2.new(0.075, 0, 0.2, 0)
+toggleButton.Size = UDim2.new(0.85, 0, 0, 32)
+toggleButton.Position = UDim2.new(0.075, 0, 0.15, 0)
 toggleButton.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
 toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 toggleButton.Text = "Magnet: OFF"
@@ -182,20 +183,20 @@ toggleButton.MouseButton1Click:Connect(function()
     end
 end)
 
--- Slider & Textbox Delay Controls
-local sliderLabel = Instance.new("TextLabel")
-sliderLabel.Size = UDim2.new(0.5, 0, 0, 20)
-sliderLabel.Position = UDim2.new(0.075, 0, 0.45, 0)
-sliderLabel.BackgroundTransparency = 1
-sliderLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-sliderLabel.Text = "Script Delay:"
-sliderLabel.TextSize = 12
-sliderLabel.Font = Enum.Font.SourceSans
-sliderLabel.Parent = frame
+-- 1. DELAY CONTROLS (0.1 to 2.0s)
+local delayLabel = Instance.new("TextLabel")
+delayLabel.Size = UDim2.new(0.5, 0, 0, 18)
+delayLabel.Position = UDim2.new(0.075, 0, 0.32, 0)
+delayLabel.BackgroundTransparency = 1
+delayLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+delayLabel.Text = "Script Delay:"
+delayLabel.TextSize = 12
+delayLabel.Font = Enum.Font.SourceSans
+delayLabel.Parent = frame
 
 local delayTextBox = Instance.new("TextBox")
-delayTextBox.Size = UDim2.new(0.32, 0, 0, 24)
-delayTextBox.Position = UDim2.new(0.605, 0, 0.44, 0)
+delayTextBox.Size = UDim2.new(0.32, 0, 0, 22)
+delayTextBox.Position = UDim2.new(0.605, 0, 0.31, 0)
 delayTextBox.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
 delayTextBox.TextColor3 = Color3.fromRGB(255, 255, 255)
 delayTextBox.Text = "0.1"
@@ -203,41 +204,97 @@ delayTextBox.TextSize = 13
 delayTextBox.Font = Enum.Font.SourceSansBold
 delayTextBox.Parent = frame
 
-local boxCorner = Instance.new("UICorner")
-boxCorner.CornerRadius = UDim.new(0, 4)
-boxCorner.Parent = delayTextBox
+local boxCorner1 = Instance.new("UICorner")
+boxCorner1.CornerRadius = UDim.new(0, 4)
+boxCorner1.Parent = delayTextBox
 
-local sliderBg = Instance.new("TextButton")
-sliderBg.Size = UDim2.new(0.85, 0, 0, 15)
-sliderBg.Position = UDim2.new(0.075, 0, 0.65, 0)
-sliderBg.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-sliderBg.Text = ""
-sliderBg.AutoButtonColor = false
-sliderBg.Parent = frame
+local delaySliderBg = Instance.new("TextButton")
+delaySliderBg.Size = UDim2.new(0.85, 0, 0, 12)
+delaySliderBg.Position = UDim2.new(0.075, 0, 0.44, 0)
+delaySliderBg.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+delaySliderBg.Text = ""
+delaySliderBg.AutoButtonColor = false
+delaySliderBg.Parent = frame
 
-local sliderFill = Instance.new("Frame")
-sliderFill.Size = UDim2.new(0.05, 0, 1, 0)
-sliderFill.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
-sliderFill.BorderSizePixel = 0
-sliderFill.Parent = sliderBg
+local delaySliderFill = Instance.new("Frame")
+delaySliderFill.Size = UDim2.new(0.05, 0, 1, 0)
+delaySliderFill.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
+delaySliderFill.BorderSizePixel = 0
+delaySliderFill.Parent = delaySliderBg
 
 local function updateDelay(val)
     scriptDelay = math.clamp(tonumber(val) or 0.1, 0.1, 2.0)
     delayTextBox.Text = tostring(scriptDelay)
     local pct = (scriptDelay - 0.1) / (2.0 - 0.1)
-    sliderFill.Size = UDim2.new(pct, 0, 1, 0)
+    delaySliderFill.Size = UDim2.new(pct, 0, 1, 0)
 end
 
 delayTextBox.FocusLost:Connect(function()
     updateDelay(delayTextBox.Text)
 end)
 
-sliderBg.MouseButton1Down:Connect(function()
+delaySliderBg.MouseButton1Down:Connect(function()
     local mouse = LocalPlayer:GetMouse()
-    local relativeX = math.clamp(mouse.X - sliderBg.AbsolutePosition.X, 0, sliderBg.AbsoluteSize.X)
-    local percentage = relativeX / sliderBg.AbsoluteSize.X
+    local relativeX = math.clamp(mouse.X - delaySliderBg.AbsolutePosition.X, 0, delaySliderBg.AbsoluteSize.X)
+    local percentage = relativeX / delaySliderBg.AbsoluteSize.X
     local calculatedVal = 0.1 + (percentage * (2.0 - 0.1))
     updateDelay(string.format("%.2f", calculatedVal))
 end)
 
-print("Fraudmaxxing v1 Loaded Successfully!")
+-- 2. RANGE CONTROLS (10 to 100 studs)
+local rangeLabel = Instance.new("TextLabel")
+rangeLabel.Size = UDim2.new(0.5, 0, 0, 18)
+rangeLabel.Position = UDim2.new(0.075, 0, 0.58, 0)
+rangeLabel.BackgroundTransparency = 1
+rangeLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+rangeLabel.Text = "Magnet Range:"
+rangeLabel.TextSize = 12
+rangeLabel.Font = Enum.Font.SourceSans
+rangeLabel.Parent = frame
+
+local rangeTextBox = Instance.new("TextBox")
+rangeTextBox.Size = UDim2.new(0.32, 0, 0, 22)
+rangeTextBox.Position = UDim2.new(0.605, 0, 0.57, 0)
+rangeTextBox.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+rangeTextBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+rangeTextBox.Text = "75"
+rangeTextBox.TextSize = 13
+rangeTextBox.Font = Enum.Font.SourceSansBold
+rangeTextBox.Parent = frame
+
+local boxCorner2 = Instance.new("UICorner")
+boxCorner2.CornerRadius = UDim.new(0, 4)
+boxCorner2.Parent = rangeTextBox
+
+local rangeSliderBg = Instance.new("TextButton")
+rangeSliderBg.Size = UDim2.new(0.85, 0, 0, 12)
+rangeSliderBg.Position = UDim2.new(0.075, 0, 0.70, 0)
+rangeSliderBg.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+rangeSliderBg.Text = ""
+rangeSliderBg.AutoButtonColor = false
+rangeSliderBg.Parent = frame
+
+local rangeSliderFill = Instance.new("Frame")
+rangeSliderFill.Size = UDim2.new(0.72, 0, 1, 0) -- default for 75 out of 100
+rangeSliderFill.BackgroundColor3 = Color3.fromRGB(215, 120, 0)
+rangeSliderFill.BorderSizePixel = 0
+rangeSliderFill.Parent = rangeSliderBg
+
+local function updateRange(val)
+    scriptRange = math.clamp(tonumber(val) or 75, 10, 100)
+    rangeTextBox.Text = tostring(scriptRange)
+    local pct = (scriptRange - 10) / (100 - 10)
+    rangeSliderFill.Size = UDim2.new(pct, 0, 1, 0)
+end
+
+rangeTextBox.FocusLost:Connect(function()
+    updateRange(rangeTextBox.Text)
+end)
+
+rangeSliderBg.MouseButton1Down:Connect(function()
+    local mouse = LocalPlayer:GetMouse()
+    local relativeX = math.clamp(mouse.X - rangeSliderBg.AbsolutePosition.X, 0, rangeSliderBg.AbsoluteSize.X)
+    local percentage = relativeX / rangeSliderBg.AbsoluteSize.X
+    local calculatedVal = 10 + (percentage * (100 - 10))
+    updateRange(math.floor(calculatedVal))
+end)
