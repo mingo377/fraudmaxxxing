@@ -1,65 +1,45 @@
--- Services & Variables
-local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
-local UserInputService = game:GetService("UserInputService")
+-- 1. Print test to confirm execution
+print("Solitude script started!")
 
-local speedEnabled = false
-local customSpeed = 32
-
--- 1. Load the UI Library
+-- 2. Load the Orion UI Library
 local OrionLib = loadstring(game:HttpGet('https://raw.githubusercontent.com/shlexware/Orion/main/source'))()
 
--- 2. Create the Window and Tab
-local Window = OrionLib:MakeWindow({Name = "My Mobile Hub", HidePremium = false})
-local MainTab = Window:MakeTab({Name = "Main Controls", Icon = "rbxassetid://4483345998"})
+-- 3. Create the Window Menu
+local Window = OrionLib:MakeWindow({
+    Name = "Solitude Dash Helper",
+    HidePremium = false,
+    SaveConfig = true,
+    ConfigFolder = "SolitudeConfig"
+})
 
--- 3. Add a Toggle that controls the speed variable
-MainTab:AddToggle({
-    Name = "Custom Speed",
+-- 4. Create a Tab
+local Tab = Window:MakeTab({
+    Name = "Main",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+-- 5. Add a Toggle
+Tab:AddToggle({
+    Name = "Solitude Dash Helper",
     Default = false,
     Callback = function(Value)
-        speedEnabled = Value
-        local char = LocalPlayer.Character
-        if char and char:FindFirstChild("Humanoid") then
-            if speedEnabled then
-                char.Humanoid.WalkSpeed = customSpeed
-            else
-                char.Humanoid.WalkSpeed = 16 -- Default speed
-            end
-        end
+        print("Dash helper toggled:", Value)
     end    
 })
 
--- 4. Add a Slider to change how fast the speed is
-MainTab:AddSlider({
-    Name = "Speed Value",
-    Min = 16,
-    Max = 100,
-    Default = 32,
-    Increment = 1,
-    ValueName = "Speed",
+-- 6. Add a Slider for Delay
+Tab:AddSlider({
+    Name = "Magnet Delay",
+    Min = 0,
+    Max = 1,
+    Default = 0.1,
+    Increment = 0.05,
+    ValueName = "Seconds",
     Callback = function(Value)
-        customSpeed = Value
-        -- If speed is currently enabled, update it immediately
-        if speedEnabled then
-            local char = LocalPlayer.Character
-            if char and char:FindFirstChild("Humanoid") then
-                char.Humanoid.WalkSpeed = customSpeed
-            end
-        end
+        print("Delay set to:", Value)
     end    
 })
 
--- 5. Keep the speed active even when your character resets/respawns
-LocalPlayer.CharacterAdded:Connect(function(character)
-    local humanoid = character:WaitForChild("Humanoid")
-    
-    humanoid:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
-        if speedEnabled and humanoid.WalkSpeed ~= customSpeed then
-            humanoid.WalkSpeed = customSpeed
-        end
-    end)
-end)
-
--- Initialize the UI interface
+-- Initialize UI
 OrionLib:Init()
