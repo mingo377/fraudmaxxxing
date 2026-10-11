@@ -12,17 +12,17 @@ if parentGui:FindFirstChild("SolitudeSimpleGui") then
 end
 
 ---------------------------------------------------------
--- TSB FRONT-DASH MAGNET LOGIC
+-- FRONT-DASH MAGNET MECHANICS
 ---------------------------------------------------------
 local magnetEnabled = false
-local scriptDelay = 0.1 -- Controlled by slider or textbox (0.1 to 2.0s)
+local scriptDelay = 0.1
 local isTweening = false
 local lastDashTime = 0
 
--- Function to find nearest target
+-- Find nearest target (Player or Dummy)
 local function getNearestTarget()
     local character = LocalPlayer.Character
-    if not character or not character:FindFirstChild("HumanoidRootPart") then nil end
+    if not character or not character:FindFirstChild("HumanoidRootPart") then return nil end
     
     local nearest = nil
     local shortestDistance = math.huge
@@ -41,7 +41,7 @@ local function getNearestTarget()
     return nearest
 end
 
--- Perform the Tween Magnet
+-- Perform Magnet Tween
 local function performMagnet()
     if isTweening then return end
     
@@ -52,7 +52,6 @@ local function performMagnet()
     if target and target:FindFirstChild("HumanoidRootPart") then
         isTweening = true
         
-        -- Respect the delay property specified by slider/textbox
         if scriptDelay > 0 then
             task.wait(scriptDelay)
         end
@@ -60,10 +59,7 @@ local function performMagnet()
         local rootPart = character.HumanoidRootPart
         local targetRoot = target.HumanoidRootPart
         
-        -- Target Position: Right in front/on top of target torso
         local destination = targetRoot.CFrame * CFrame.new(0, 2, -1)
-        
-        -- Smooth Tween Glide
         local tweenInfo = TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
         local tween = TweenService:Create(rootPart, tweenInfo, {CFrame = destination})
         
@@ -75,7 +71,7 @@ local function performMagnet()
     end
 end
 
--- Bulletproof Front-Dash Detection (Speed Spike + Forward Movement Check)
+-- Front Dash Detection Logic
 RunService.RenderStepped:Connect(function()
     if not magnetEnabled or isTweening then return end
     
@@ -85,14 +81,13 @@ RunService.RenderStepped:Connect(function()
     local rootPart = character.HumanoidRootPart
     local humanoid = character.Humanoid
     
-    -- TSB dash creates a sharp speed spike over 28 studs/s
     local horizontalSpeed = Vector3.new(rootPart.AssemblyLinearVelocity.X, 0, rootPart.AssemblyLinearVelocity.Z).Magnitude
     
     if horizontalSpeed > 28 then
         local moveDir = humanoid.MoveDirection
         local lookVec = rootPart.CFrame.LookVector
         
-        -- Check if moving FORWARD (Front Dash only. Side/Back dashes will output a negative or low dot product)
+        -- Forward direction check (Front Dash only)
         if moveDir.Magnitude > 0 and moveDir:Dot(lookVec) > 0.4 then
             if tick() - lastDashTime > 0.5 then
                 lastDashTime = tick()
@@ -103,14 +98,14 @@ RunService.RenderStepped:Connect(function()
 end)
 
 ---------------------------------------------------------
--- MOBILE UI CREATION
+-- NATIVE MOBILE UI CREATION
 ---------------------------------------------------------
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "SolitudeSimpleGui"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = parentGui
 
--- FLOATING SHOW/HIDE MENU BUTTON
+-- Floating UI Button
 local hideShowBtn = Instance.new("TextButton")
 hideShowBtn.Name = "HideShowButton"
 hideShowBtn.Size = UDim2.new(0, 50, 0, 50)
@@ -118,14 +113,15 @@ hideShowBtn.Position = UDim2.new(0.02, 0, 0.15, 0)
 hideShowBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
 hideShowBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 hideShowBtn.Text = "UI"
-hideShowBtn.TextSize, hideShowBtn.Font = 16, Enum.Font.SourceSansBold
+hideShowBtn.TextSize = 16
+hideShowBtn.Font = Enum.Font.SourceSansBold
 hideShowBtn.Parent = screenGui
 
 local hsCorner = Instance.new("UICorner")
 hsCorner.CornerRadius = UDim.new(0, 10)
 hsCorner.Parent = hideShowBtn
 
--- MAIN MENU FRAME
+-- Main GUI Frame
 local frame = Instance.new("Frame")
 frame.Name = "MainFrame"
 frame.Size = UDim2.new(0, 230, 0, 195)
@@ -146,27 +142,29 @@ hideShowBtn.MouseButton1Click:Connect(function()
     frame.Visible = menuVisible
 end)
 
--- Title Bar (Updated Name)
+-- Title Header
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, 0, 0, 30)
 title.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.Text = "Fraudmaxxing v1-By mingo"
-title.TextSize, title.Font = 13, Enum.Font.SourceSansBold
+title.TextSize = 13
+title.Font = Enum.Font.SourceSansBold
 title.Parent = frame
 
 local titleCorner = Instance.new("UICorner")
 titleCorner.CornerRadius = UDim.new(0, 8)
 titleCorner.Parent = title
 
--- TOGGLE BUTTON
+-- Toggle Magnet Button
 local toggleButton = Instance.new("TextButton")
 toggleButton.Size = UDim2.new(0.85, 0, 0, 35)
 toggleButton.Position = UDim2.new(0.075, 0, 0.2, 0)
 toggleButton.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
 toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 toggleButton.Text = "Magnet: OFF"
-toggleButton.TextSize, toggleButton.Font = 14, Enum.Font.SourceSansBold
+toggleButton.TextSize = 14
+toggleButton.Font = Enum.Font.SourceSansBold
 toggleButton.Parent = frame
 
 local btnCorner = Instance.new("UICorner")
@@ -184,14 +182,15 @@ toggleButton.MouseButton1Click:Connect(function()
     end
 end)
 
--- SLIDER & TEXTBOX (0.1s to 2.0s Range)
+-- Slider & Textbox Delay Controls
 local sliderLabel = Instance.new("TextLabel")
 sliderLabel.Size = UDim2.new(0.5, 0, 0, 20)
 sliderLabel.Position = UDim2.new(0.075, 0, 0.45, 0)
 sliderLabel.BackgroundTransparency = 1
 sliderLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
 sliderLabel.Text = "Script Delay:"
-sliderLabel.TextSize, sliderLabel.Font = 12, Enum.Font.SourceSans
+sliderLabel.TextSize = 12
+sliderLabel.Font = Enum.Font.SourceSans
 sliderLabel.Parent = frame
 
 local delayTextBox = Instance.new("TextBox")
@@ -200,7 +199,8 @@ delayTextBox.Position = UDim2.new(0.605, 0, 0.44, 0)
 delayTextBox.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
 delayTextBox.TextColor3 = Color3.fromRGB(255, 255, 255)
 delayTextBox.Text = "0.1"
-delayTextBox.TextSize, delayTextBox.Font = 13, Enum.Font.SourceSansBold
+delayTextBox.TextSize = 13
+delayTextBox.Font = Enum.Font.SourceSansBold
 delayTextBox.Parent = frame
 
 local boxCorner = Instance.new("UICorner")
@@ -239,3 +239,5 @@ sliderBg.MouseButton1Down:Connect(function()
     local calculatedVal = 0.1 + (percentage * (2.0 - 0.1))
     updateDelay(string.format("%.2f", calculatedVal))
 end)
+
+print("Fraudmaxxing v1 Loaded Successfully!")
