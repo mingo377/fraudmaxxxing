@@ -10,21 +10,21 @@ if parentGui:FindFirstChild("SolitudeSimpleGui") then
 end
 
 ---------------------------------------------------------
--- FRAUDMAXXING DIRECT REMOTE & SOLITUDE PATTERN
+-- FRAUDMAXXING FIXED SOLITUDE PATTERN (WORKSPACE.LIVE)
 ---------------------------------------------------------
 local magnetEnabled = false
 local scriptDelay = 0.1
 local scriptRange = 75
 local isExecuting = false
 
--- Exact TSB Remote Input Table (Extracted from KittyWare mechanics)[span_4](start_span)[span_4](end_span)
+-- Exact TSB Remote Input Table (From KittyWare mechanics)[span_3](start_span)[span_3](end_span)
 local frontDashData = {
     Dash = Enum.KeyCode.W,
     Key = Enum.KeyCode.Q,
     Goal = "KeyPress",
 }
 
--- Find nearest target within range (Scanning workspace.Live)
+-- Correct Target Finder looking inside workspace.Live (TSB standard)[span_4](start_span)[span_4](end_span)
 local function getNearestTarget()
     local character = LocalPlayer.Character
     if not character or not character:FindFirstChild("HumanoidRootPart") then return nil end
@@ -69,7 +69,7 @@ local function performSolitudePattern()
             task.wait(scriptDelay)
         end
         
-        -- Directly trigger the dash via TSB remote (KittyWare approach)[span_5](start_span)[span_5](end_span)
+        -- Directly trigger the dash via TSB remote[span_5](start_span)[span_5](end_span)
         communicate:FireServer(frontDashData)
         
         local rootPart = character.HumanoidRootPart
@@ -102,6 +102,8 @@ local function performSolitudePattern()
             -- Instantly snap and face target during pattern execution
             rootPart.CFrame = CFrame.new(newPos, targetPos)
         end)
+    else
+        print("Fraudmaxxing Debug: No target found in workspace.Live or Communicate missing!")
     end
 end
 
@@ -307,7 +309,7 @@ rangeSliderFill.Parent = rangeSliderBg
 
 local function updateRange(val)
     scriptRange = math.clamp(tonumber(val) or 75, 10, 100)
-    rangeTextBox.Text = tostring(scriptRange)
+    rangeTextBox.Text = tostring(rangeTextBox.Text)
     local pct = (scriptRange - 10) / (100 - 10)
     rangeSliderFill.Size = UDim2.new(pct, 0, 1, 0)
 end
@@ -320,4 +322,4 @@ rangeSliderBg.MouseButton1Down:Connect(function()
     updateRange(math.floor(10 + (percentage * (100 - 10))))
 end)
 
-print("Fraudmaxxing v1-By mingo loaded with Direct Remote Execution!")
+print("Fraudmaxxing v1-By mingo loaded with workspace.Live Target Scanner!")
