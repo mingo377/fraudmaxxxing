@@ -11,10 +11,11 @@ if parentGui:FindFirstChild("SolitudeSimpleGui") then
 end
 
 ---------------------------------------------------------
--- TSB LOCK-ON / ORBIT ASSIST LOGIC
+-- TSB LOCK-ON ASSIST LOGIC
 ---------------------------------------------------------
-local dashEnabled = false
-local currentDelay = 0.05 -- Slider controls this delay
+local lockOnEnabled = false
+local scriptDelay = 0.1 -- Controlled by slider or textbox (0.1 to 2.0)
+local lastSnapTick = 0
 
 local function getNearestTarget()
     local character = LocalPlayer.Character
@@ -27,7 +28,7 @@ local function getNearestTarget()
         if obj ~= character and obj:FindFirstChild("HumanoidRootPart") and obj:FindFirstChild("Humanoid") then
             if obj.Humanoid.Health > 0 then
                 local dist = (character.HumanoidRootPart.Position - obj.HumanoidRootPart.Position).Magnitude
-                if dist < shortestDistance and dist <= 50 then -- Lock-on range
+                if dist < shortestDistance and dist <= 60 then
                     shortestDistance = dist
                     nearest = obj
                 end
@@ -37,24 +38,23 @@ local function getNearestTarget()
     return nearest
 end
 
--- Continuous Lock-on Loop respecting the Slider Delay
-task.spawn(function()
-    while true do
-        if dashEnabled then
-            local character = LocalPlayer.Character
-            if character and character:FindFirstChild("HumanoidRootPart") then
-                local target = getNearestTarget()
-                if target and target:FindFirstChild("HumanoidRootPart") then
-                    local rootPart = character.HumanoidRootPart
-                    local targetPos = target.HumanoidRootPart.Position
-                    
-                    -- Continuously lock facing direction toward target for that clean orbit pattern
-                    rootPart.CFrame = CFrame.new(rootPart.Position, Vector3.new(targetPos.X, rootPart.Position.Y, targetPos.Z))
-                end
-            end
-            task.wait(currentDelay) -- Slider directly controls this delay!
-        else
-            task.wait(0.2)
+-- Continuous Lock-on Loop using RenderStepped for real-time tracking
+RunService.RenderStepped:Connect(function()
+    if not lockOnEnabled then return end
+    
+    local tickTime = tick()
+    if tickTime - lastSnapTick < scriptDelay then return end
+    
+    local character = LocalPlayer.Character
+    if character and character:FindFirstChild("HumanoidRootPart") then
+        local target = getNearestTarget()
+        if target and target:FindFirstChild("HumanoidRootPart") then
+            local rootPart = character.HumanoidRootPart
+            local targetPos = target.HumanoidRootPart.Position
+            
+            -- Force character orientation to face the target instantly
+            rootPart.CFrame = CFrame.new(rootPart.Position, Vector3.new(targetPos.X, rootPart.Position.Y, targetPos.Z))
+            lastSnapTick = tickTime
         end
     end
 end)
@@ -67,10 +67,26 @@ screenGui.Name = "SolitudeSimpleGui"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = parentGui
 
+-- 1. FLOATING SHOW/HIDE MENU BUTTON (Always visible on screen)
+local hideShowBtn = Instance.new("TextButton")
+hideShowBtn.Name = "HideShowButton"
+hideShowBtn.Size = UDim2.new(0, 50, 0, 50)
+hideShowBtn.Position = UDim2.new(0.02, 0, 0.15, 0)
+hideShowBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+hideShowBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+hideShowBtn.Text = "UI"
+hideShowBtn.TextSize, hideShowBtn.Font = 16, Enum.Font.SourceSansBold
+hideShowBtn.Parent = screenGui
+
+local hsCorner = Instance.new("UICorner")
+hsCorner.CornerRadius = UDim.new(0, 10)
+hsCorner.Parent = hideShowBtn
+
+-- 2. MAIN MENU FRAME
 local frame = Instance.new("Frame")
 frame.Name = "MainFrame"
-frame.Size = UDim2.new(0, 220, 0, 160)
-frame.Position = UDim2.new(0.05, 0, 0.3, 0)
+frame.Size = UDim2.new(0, 230, 0, 195)
+frame.Position = UDim2.new(0.1, 0, 0.25, 0)
 frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 frame.BorderSizePixel = 0
 frame.Active = true
@@ -81,29 +97,34 @@ local frameCorner = Instance.new("UICorner")
 frameCorner.CornerRadius = UDim.new(0, 8)
 frameCorner.Parent = frame
 
+-- Toggle Menu Visibility via Floating Button
+local menuVisible = true
+hideShowBtn.MouseButton1Click:Connect(function()
+    menuVisible = not menuVisible
+    frame.Visible = menuVisible
+end)
+
+-- Title Bar
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, 0, 0, 30)
 title.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.Text = "Solitude | Lock-On Assist"
-title.TextSize = 14
-title.Font = Enum.Font.SourceSansBold
+title.TextSize, title.Font = 14, Enum.Font.SourceSansBold
 title.Parent = frame
 
 local titleCorner = Instance.new("UICorner")
 titleCorner.CornerRadius = UDim.new(0, 8)
 titleCorner.Parent = title
 
--- TOGGLE BUTTON
+-- LOCK-ON TOGGLE BUTTON
 local toggleButton = Instance.new("TextButton")
-toggleButton.Name = "ToggleButton"
 toggleButton.Size = UDim2.new(0.85, 0, 0, 35)
-toggleButton.Position = UDim2.new(0.075, 0, 0.3, 0)
+toggleButton.Position = UDim2.new(0.075, 0, 0.2, 0)
 toggleButton.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
 toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 toggleButton.Text = "Lock-On: OFF"
-toggleButton.TextSize = 14
-toggleButton.Font = Enum.Font.SourceSansBold
+toggleButton.TextSize, toggleButton.Font = 14, Enum.Font.SourceSansBold
 toggleButton.Parent = frame
 
 local btnCorner = Instance.new("UICorner")
@@ -111,8 +132,8 @@ btnCorner.CornerRadius = UDim.new(0, 6)
 btnCorner.Parent = toggleButton
 
 toggleButton.MouseButton1Click:Connect(function()
-    dashEnabled = not dashEnabled
-    if dashEnabled then
+    lockOnEnabled = not lockOnEnabled
+    if lockOnEnabled then
         toggleButton.Text = "Lock-On: ON"
         toggleButton.BackgroundColor3 = Color3.fromRGB(40, 180, 40)
     else
@@ -121,21 +142,33 @@ toggleButton.MouseButton1Click:Connect(function()
     end
 end)
 
--- SLIDER (SCRIPT DELAY PROPERTY)
+-- SLIDER & TEXTBOX CONTAINER FOR DELAY (0.1 to 2.0s)
 local sliderLabel = Instance.new("TextLabel")
-sliderLabel.Size = UDim2.new(0.85, 0, 0, 20)
-sliderLabel.Position = UDim2.new(0.075, 0, 0.6, 0)
+sliderLabel.Size = UDim2.new(0.5, 0, 0, 20)
+sliderLabel.Position = UDim2.new(0.075, 0, 0.45, 0)
 sliderLabel.BackgroundTransparency = 1
 sliderLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-sliderLabel.Text = "Script Delay: 0.05s"
-sliderLabel.TextSize = 12
-sliderLabel.Font = Enum.Font.SourceSans
+sliderLabel.Text = "Script Delay:"
+sliderLabel.TextSize, sliderLabel.Font = 12, Enum.Font.SourceSans
 sliderLabel.Parent = frame
 
+-- Typeable TextBox for exact delay value
+local delayTextBox = Instance.new("TextBox")
+delayTextBox.Size = UDim2.new(0.32, 0, 0, 24)
+delayTextBox.Position = UDim2.new(0.605, 0, 0.44, 0)
+delayTextBox.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+delayTextBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+delayTextBox.Text = "0.1"
+delayTextBox.TextSize, delayTextBox.Font = 13, Enum.Font.SourceSansBold
+delayTextBox.Parent = frame
+
+local boxCorner = Instance.new("UICorner")
+boxCorner.CornerRadius = UDim.new(0, 4)
+boxCorner.Parent = delayTextBox
+
 local sliderBg = Instance.new("TextButton")
-sliderBg.Name = "SliderBg"
 sliderBg.Size = UDim2.new(0.85, 0, 0, 15)
-sliderBg.Position = UDim2.new(0.075, 0, 0.78, 0)
+sliderBg.Position = UDim2.new(0.075, 0, 0.65, 0)
 sliderBg.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
 sliderBg.Text = ""
 sliderBg.AutoButtonColor = false
@@ -147,12 +180,22 @@ sliderFill.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
 sliderFill.BorderSizePixel = 0
 sliderFill.Parent = sliderBg
 
+-- Function to update delay value across slider and textbox
+local function updateDelay(val)
+    scriptDelay = math.clamp(tonumber(val) or 0.1, 0.1, 2.0)
+    delayTextBox.Text = tostring(scriptDelay)
+    local pct = (scriptDelay - 0.1) / (2.0 - 0.1)
+    sliderFill.Size = UDim2.new(pct, 0, 1, 0)
+end
+
+delayTextBox.FocusLost:Connect(function()
+    updateDelay(delayTextBox.Text)
+end)
+
 sliderBg.MouseButton1Down:Connect(function()
     local mouse = LocalPlayer:GetMouse()
     local relativeX = math.clamp(mouse.X - sliderBg.AbsolutePosition.X, 0, sliderBg.AbsoluteSize.X)
     local percentage = relativeX / sliderBg.AbsoluteSize.X
-    
-    currentDelay = math.floor((percentage * 0.5) * 1000) / 1000 -- Max delay 0.5s
-    sliderFill.Size = UDim2.new(percentage, 0, 1, 0)
-    sliderLabel.Text = "Script Delay: " .. tostring(currentDelay) .. "s"
+    local calculatedVal = 0.1 + (percentage * (2.0 - 0.1))
+    updateDelay(string.format("%.2f", calculatedVal))
 end)
