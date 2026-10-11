@@ -1,8 +1,9 @@
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 local CoreGui = game:GetService("CoreGui")
 
--- Use CoreGui if available, otherwise fallback to PlayerGui
 local parentGui = (gethui and gethui()) or CoreGui or LocalPlayer:WaitForChild("PlayerGui")
 
 -- Remove old GUI if re-executed
@@ -10,29 +11,86 @@ if parentGui:FindFirstChild("SolitudeSimpleGui") then
     parentGui.SolitudeSimpleGui:Destroy()
 end
 
--- 1. Create Main ScreenGui Container
+---------------------------------------------------------
+-- DASH HELPER LOGIC VARIABLES
+---------------------------------------------------------
+local dashEnabled = false
+local currentDelay = 0.1
+local isDashing = false
+
+-- Function to find nearest target (Player or Dummy in TSB)
+local function getNearestTarget()
+    local character = LocalPlayer.Character
+    if not character or not character:FindFirstChild("HumanoidRootPart") then return nil end
+    
+    local nearest = nil
+    local shortestDistance = math.huge
+    
+    -- Search all entities in workspace
+    for _, obj in pairs(workspace:GetChildren()) do
+        if obj ~= character and obj:FindFirstChild("HumanoidRootPart") and obj:FindFirstChild("Humanoid") then
+            if obj.Humanoid.Health > 0 then
+                local dist = (character.HumanoidRootPart.Position - obj.HumanoidRootPart.Position).Magnitude
+                if dist < shortestDistance and dist <= 35 then -- Max target distance: 35 studs
+                    shortestDistance = dist
+                    nearest = obj
+                end
+            end
+        end
+    end
+    return nearest
+end
+
+-- Function to execute dash snap
+local function performDashSnap()
+    if not dashEnabled or isDashing then return end
+    
+    local character = LocalPlayer.Character
+    if not character or not character:FindFirstChild("HumanoidRootPart") then return end
+    
+    local target = getNearestTarget()
+    if target and target:FindFirstChild("HumanoidRootPart") then
+        isDashing = true
+        
+        -- Lock orientation towards target for accurate dash tech
+        local targetPos = target.HumanoidRootPart.Position
+        character.HumanoidRootPart.CFrame = CFrame.new(character.HumanoidRootPart.Position, Vector3.new(targetPos.X, character.HumanoidRootPart.Position.Y, targetPos.Z))
+        
+        task.wait(currentDelay)
+        isDashing = false
+    end
+end
+
+-- Detect when user dashes (Q key on PC, or Dash Action Button on Mobile)
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.Q or input.UserInputType == Enum.UserInputType.Touch then
+        performDashSnap()
+    end
+end)
+
+---------------------------------------------------------
+-- MOBILE UI CREATION
+---------------------------------------------------------
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "SolitudeSimpleGui"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = parentGui
 
--- 2. Create Main Frame (Menu Box)
 local frame = Instance.new("Frame")
 frame.Name = "MainFrame"
 frame.Size = UDim2.new(0, 220, 0, 160)
-frame.Position = UDim2.new(0.05, 0, 0.3, 0) -- Top-left area of screen
+frame.Position = UDim2.new(0.05, 0, 0.3, 0)
 frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 frame.BorderSizePixel = 0
 frame.Active = true
-frame.Draggable = true -- Allows you to drag the menu around on mobile
+frame.Draggable = true
 frame.Parent = screenGui
 
--- Rounded corners for the menu
 local frameCorner = Instance.new("UICorner")
 frameCorner.CornerRadius = UDim.new(0, 8)
 frameCorner.Parent = frame
 
--- Title Bar
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, 0, 0, 30)
 title.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
@@ -46,12 +104,12 @@ local titleCorner = Instance.new("UICorner")
 titleCorner.CornerRadius = UDim.new(0, 8)
 titleCorner.Parent = title
 
--- 3. Create Toggle Button
+-- TOGGLE BUTTON
 local toggleButton = Instance.new("TextButton")
 toggleButton.Name = "ToggleButton"
 toggleButton.Size = UDim2.new(0.85, 0, 0, 35)
 toggleButton.Position = UDim2.new(0.075, 0, 0.3, 0)
-toggleButton.BackgroundColor3 = Color3.fromRGB(180, 40, 40) -- Red (OFF)
+toggleButton.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
 toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 toggleButton.Text = "Dash Helper: OFF"
 toggleButton.TextSize = 14
@@ -62,22 +120,18 @@ local btnCorner = Instance.new("UICorner")
 btnCorner.CornerRadius = UDim.new(0, 6)
 btnCorner.Parent = toggleButton
 
--- Toggle Logic
-local dashEnabled = false
 toggleButton.MouseButton1Click:Connect(function()
     dashEnabled = not dashEnabled
     if dashEnabled then
         toggleButton.Text = "Dash Helper: ON"
-        toggleButton.BackgroundColor3 = Color3.fromRGB(40, 180, 40) -- Green (ON)
-        print("Dash Helper Enabled")
+        toggleButton.BackgroundColor3 = Color3.fromRGB(40, 180, 40)
     else
         toggleButton.Text = "Dash Helper: OFF"
-        toggleButton.BackgroundColor3 = Color3.fromRGB(180, 40, 40) -- Red (OFF)
-        print("Dash Helper Disabled")
+        toggleButton.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
     end
 end)
 
--- 4. Create Simple Slider (Delay Setting)
+-- SLIDER (DELAY)
 local sliderLabel = Instance.new("TextLabel")
 sliderLabel.Size = UDim2.new(0.85, 0, 0, 20)
 sliderLabel.Position = UDim2.new(0.075, 0, 0.6, 0)
@@ -98,21 +152,17 @@ sliderBg.AutoButtonColor = false
 sliderBg.Parent = frame
 
 local sliderFill = Instance.new("Frame")
-sliderFill.Size = UDim2.new(0.1, 0, 1, 0) -- Default 0.1s
+sliderFill.Size = UDim2.new(0.1, 0, 1, 0)
 sliderFill.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
 sliderFill.BorderSizePixel = 0
 sliderFill.Parent = sliderBg
 
-local currentDelay = 0.1
 sliderBg.MouseButton1Down:Connect(function()
     local mouse = LocalPlayer:GetMouse()
     local relativeX = math.clamp(mouse.X - sliderBg.AbsolutePosition.X, 0, sliderBg.AbsoluteSize.X)
     local percentage = relativeX / sliderBg.AbsoluteSize.X
     
-    currentDelay = math.floor((percentage) * 100) / 100 -- Rounded delay
+    currentDelay = math.floor((percentage) * 100) / 100
     sliderFill.Size = UDim2.new(percentage, 0, 1, 0)
     sliderLabel.Text = "Magnet Delay: " .. tostring(currentDelay) .. "s"
-    print("Delay set to:", currentDelay)
 end)
-
-print("Custom UI loaded successfully!")
