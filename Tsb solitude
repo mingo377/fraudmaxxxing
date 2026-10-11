@@ -1,4 +1,5 @@
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer
 local CoreGui = game:GetService("CoreGui")
@@ -16,11 +17,12 @@ end
 local magnetEnabled = false
 local scriptDelay = 0.1 -- Controlled by slider or textbox (0.1 to 2.0s)
 local isTweening = false
+local lastDashTime = 0
 
 -- Function to find nearest target
 local function getNearestTarget()
     local character = LocalPlayer.Character
-    if not character or not character:FindFirstChild("HumanoidRootPart") then return nil end
+    if not character or not character:FindFirstChild("HumanoidRootPart") then nil end
     
     local nearest = nil
     local shortestDistance = math.huge
@@ -41,7 +43,7 @@ end
 
 -- Perform the Tween Magnet
 local function performMagnet()
-    if not magnetEnabled or isTweening then return end
+    if isTweening then return end
     
     local character = LocalPlayer.Character
     if not character or not character:FindFirstChild("HumanoidRootPart") then return end
@@ -68,49 +70,37 @@ local function performMagnet()
         tween:Play()
         tween.Completed:Wait()
         
-        task.wait(0.2)
+        task.wait(0.3)
         isTweening = false
     end
 end
 
--- Detect ONLY Front Dashes via Animation + Movement Direction
-local function setupAnimationTracker(char)
-    local humanoid = char:WaitForChild("Humanoid", 5)
-    if not humanoid then return end
+-- Bulletproof Front-Dash Detection (Speed Spike + Forward Movement Check)
+RunService.RenderStepped:Connect(function()
+    if not magnetEnabled or isTweening then return end
     
-    local animator = humanoid:WaitForChild("Animator", 5)
-    if not animator then return end
+    local character = LocalPlayer.Character
+    if not character or not character:FindFirstChild("HumanoidRootPart") or not character:FindFirstChild("Humanoid") then return end
     
-    animator.AnimationPlayed:Connect(function(animationTrack)
-        if not magnetEnabled then return end
+    local rootPart = character.HumanoidRootPart
+    local humanoid = character.Humanoid
+    
+    -- TSB dash creates a sharp speed spike over 28 studs/s
+    local horizontalSpeed = Vector3.new(rootPart.AssemblyLinearVelocity.X, 0, rootPart.AssemblyLinearVelocity.Z).Magnitude
+    
+    if horizontalSpeed > 28 then
+        local moveDir = humanoid.MoveDirection
+        local lookVec = rootPart.CFrame.LookVector
         
-        local animName = animationTrack.Name:lower()
-        local isDash = animName:find("dash") or animName:find("evade") or animName:find("dodge")
-        local isSideOrBack = animName:find("side") or animName:find("back") or animName:find("left") or animName:find("right")
-        
-        -- Trigger ONLY if it's a dash and NOT a side/back dash
-        if isDash and not isSideOrBack then
-            task.spawn(function()
-                task.wait(0.03) -- Quick check window to verify forward direction
-                if char and char:FindFirstChild("HumanoidRootPart") then
-                    local root = char.HumanoidRootPart
-                    local moveDir = root.AssemblyLinearVelocity
-                    local lookVec = root.CFrame.LookVector
-                    
-                    -- Ensure character is actually moving forward relative to where they look
-                    if moveDir:Dot(lookVec) > 15 then
-                        performMagnet()
-                    end
-                end
-            end)
+        -- Check if moving FORWARD (Front Dash only. Side/Back dashes will output a negative or low dot product)
+        if moveDir.Magnitude > 0 and moveDir:Dot(lookVec) > 0.4 then
+            if tick() - lastDashTime > 0.5 then
+                lastDashTime = tick()
+                task.spawn(performMagnet)
+            end
         end
-    end)
-end
-
-if LocalPlayer.Character then
-    setupAnimationTracker(LocalPlayer.Character)
-end
-LocalPlayer.CharacterAdded:Connect(setupAnimationTracker)
+    end
+end)
 
 ---------------------------------------------------------
 -- MOBILE UI CREATION
@@ -156,7 +146,7 @@ hideShowBtn.MouseButton1Click:Connect(function()
     frame.Visible = menuVisible
 end)
 
--- Title Bar (Renamed as requested)
+-- Title Bar (Updated Name)
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, 0, 0, 30)
 title.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
