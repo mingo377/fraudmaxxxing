@@ -10,15 +10,21 @@ if parentGui:FindFirstChild("SolitudeSimpleGui") then
 end
 
 ---------------------------------------------------------
--- FRAUDMAXXING AUTOMATIC SOLITUDE ORBIT MECHANICS
+-- FRAUDMAXXING DIRECT REMOTE & SOLITUDE PATTERN
 ---------------------------------------------------------
 local magnetEnabled = false
 local scriptDelay = 0.1
 local scriptRange = 75
-local isOrbiting = false
-local lastOrbitTick = 0
+local isExecuting = false
 
--- Find nearest target within range
+-- Exact TSB Remote Input Table (Extracted from KittyWare mechanics)[span_4](start_span)[span_4](end_span)
+local frontDashData = {
+    Dash = Enum.KeyCode.W,
+    Key = Enum.KeyCode.Q,
+    Goal = "KeyPress",
+}
+
+-- Find nearest target within range (Scanning workspace.Live)
 local function getNearestTarget()
     local character = LocalPlayer.Character
     if not character or not character:FindFirstChild("HumanoidRootPart") then return nil end
@@ -26,7 +32,10 @@ local function getNearestTarget()
     local nearest = nil
     local shortestDistance = math.huge
     
-    for _, obj in ipairs(workspace:GetChildren()) do
+    local liveFolder = workspace:FindFirstChild("Live")
+    if not liveFolder then return nil end
+    
+    for _, obj in ipairs(liveFolder:GetChildren()) do
         if obj ~= character and obj:IsA("Model") then
             local hrp = obj:FindFirstChild("HumanoidRootPart")
             local hum = obj:FindFirstChild("Humanoid")
@@ -42,28 +51,33 @@ local function getNearestTarget()
     return nearest
 end
 
--- Perform Automatic Solitude Orbit / Circular Dash Pattern
-local function performAutomaticOrbit()
-    if not magnetEnabled or isOrbiting then return end
+-- Execute Solitude Pattern using Direct Remote Firing + Orbit Trajectory
+local function performSolitudePattern()
+    if not magnetEnabled or isExecuting then return end
     
     local character = LocalPlayer.Character
     if not character or not character:FindFirstChild("HumanoidRootPart") then return end
     
+    local communicate = character:FindFirstChild("Communicate")
     local target = getNearestTarget()
-    if target and target:FindFirstChild("HumanoidRootPart") then
-        isOrbiting = true
+    
+    if communicate and target and target:FindFirstChild("HumanoidRootPart") then
+        isExecuting = true
         
         -- Respect your custom script delay slider/textbox value
         if scriptDelay > 0 then
             task.wait(scriptDelay)
         end
         
+        -- Directly trigger the dash via TSB remote (KittyWare approach)[span_5](start_span)[span_5](end_span)
+        communicate:FireServer(frontDashData)
+        
         local rootPart = character.HumanoidRootPart
         local targetRoot = target.HumanoidRootPart
         
-        -- Solitude Orbit Arc Parameters
+        -- Solitude Circular Orbit Arc Pattern
         local radius = 35
-        local duration = 0.22
+        local duration = 0.25
         local startTime = tick()
         
         local connection
@@ -73,11 +87,11 @@ local function performAutomaticOrbit()
             
             if alpha >= 1 or not targetRoot.Parent then
                 connection:Disconnect()
-                isOrbiting = false
+                isExecuting = false
                 return
             end
             
-            -- Calculate circular arc loop trajectory around target
+            -- Calculate orbital arc trajectory around target
             local angle = alpha * math.pi * 1.5
             local offsetX = math.cos(angle) * radius
             local offsetZ = math.sin(angle) * radius
@@ -85,44 +99,14 @@ local function performAutomaticOrbit()
             local targetPos = targetRoot.Position
             local newPos = targetPos + Vector3.new(offsetX, 1.5, offsetZ)
             
-            -- Instantly snap and face the target throughout the arc loop
+            -- Instantly snap and face target during pattern execution
             rootPart.CFrame = CFrame.new(newPos, targetPos)
         end)
     end
 end
 
--- Automatic Animation & Dash Trigger (Inspired by KittyWare event hooks)[span_2](start_span)[span_2](end_span)
-local function setupAutoOrbitTracker(char)
-    local humanoid = char:WaitForChild("Humanoid", 5)
-    if not humanoid then return end
-    
-    local animator = humanoid:WaitForChild("Animator", 5)
-    if not animator then return end
-    
-    animator.AnimationPlayed:Connect(function(track)
-        if not magnetEnabled or isOrbiting then return end
-        
-        local animName = track.Name:lower()
-        local isDash = animName:find("dash") or animName:find("evade") or animName:find("dodge")
-        local isSideOrBack = animName:find("side") or animName:find("back") or animName:find("left") or animName:find("right")
-        
-        -- Trigger automatically on front dashes
-        if isDash and not isSideOrBack then
-            if tick() - lastOrbitTick > 0.6 then
-                lastOrbitTick = tick()
-                task.spawn(performAutomaticOrbit)
-            end
-        end
-    end)
-end
-
-if LocalPlayer.Character then
-    setupAutoOrbitTracker(LocalPlayer.Character)
-end
-LocalPlayer.CharacterAdded:Connect(setupAutoOrbitTracker)
-
 ---------------------------------------------------------
--- MOBILE UI CREATION (FULLY AUTOMATIC)
+-- MOBILE UI CREATION
 ---------------------------------------------------------
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "SolitudeSimpleGui"
@@ -145,7 +129,29 @@ local hsCorner = Instance.new("UICorner")
 hsCorner.CornerRadius = UDim.new(0, 10)
 hsCorner.Parent = hideShowBtn
 
--- 2. MAIN MENU FRAME
+-- 2. DEDICATED MOBILE PATTERN TRIGGER BUTTON (Draggable)
+local patternBtn = Instance.new("TextButton")
+patternBtn.Name = "PatternTriggerButton"
+patternBtn.Size = UDim2.new(0, 70, 0, 70)
+patternBtn.Position = UDim2.new(0.82, 0, 0.45, 0)
+patternBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 255)
+patternBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+patternBtn.Text = "SOLITUDE\nTECH"
+patternBtn.TextSize = 12
+patternBtn.Font = Enum.Font.SourceSansBold
+patternBtn.Active = true
+patternBtn.Draggable = true
+patternBtn.Parent = screenGui
+
+local patCorner = Instance.new("UICorner")
+patCorner.CornerRadius = UDim.new(0, 35)
+patCorner.Parent = patternBtn
+
+patternBtn.MouseButton1Click:Connect(function()
+    performSolitudePattern()
+end)
+
+-- 3. MAIN MENU FRAME
 local frame = Instance.new("Frame")
 frame.Name = "MainFrame"
 frame.Size = UDim2.new(0, 230, 0, 260)
@@ -314,4 +320,4 @@ rangeSliderBg.MouseButton1Down:Connect(function()
     updateRange(math.floor(10 + (percentage * (100 - 10))))
 end)
 
-print("Fraudmaxxing v1-By mingo loaded with Fully Automatic Solitude Orbit!")
+print("Fraudmaxxing v1-By mingo loaded with Direct Remote Execution!")
