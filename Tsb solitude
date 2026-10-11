@@ -1,4 +1,5 @@
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 local CoreGui = game:GetService("CoreGui")
 
@@ -9,12 +10,13 @@ if parentGui:FindFirstChild("SolitudeSimpleGui") then
 end
 
 ---------------------------------------------------------
--- FRAUDMAXXING ONE-TAP COMBO MECHANICS
+-- FRAUDMAXXING AUTOMATIC SOLITUDE ORBIT MECHANICS
 ---------------------------------------------------------
 local magnetEnabled = false
 local scriptDelay = 0.1
 local scriptRange = 75
-local isSnapping = false
+local isOrbiting = false
+local lastOrbitTick = 0
 
 -- Find nearest target within range
 local function getNearestTarget()
@@ -40,16 +42,16 @@ local function getNearestTarget()
     return nearest
 end
 
--- Perform Instant Snap Combo
-local function performComboSnap()
-    if not magnetEnabled or isSnapping then return end
+-- Perform Automatic Solitude Orbit / Circular Dash Pattern
+local function performAutomaticOrbit()
+    if not magnetEnabled or isOrbiting then return end
     
     local character = LocalPlayer.Character
     if not character or not character:FindFirstChild("HumanoidRootPart") then return end
     
     local target = getNearestTarget()
     if target and target:FindFirstChild("HumanoidRootPart") then
-        isSnapping = true
+        isOrbiting = true
         
         -- Respect your custom script delay slider/textbox value
         if scriptDelay > 0 then
@@ -59,16 +61,68 @@ local function performComboSnap()
         local rootPart = character.HumanoidRootPart
         local targetRoot = target.HumanoidRootPart
         
-        -- Instant CFrame teleport right onto/in front of the target
-        rootPart.CFrame = targetRoot.CFrame * CFrame.new(0, 0, 2)
+        -- Solitude Orbit Arc Parameters
+        local radius = 35
+        local duration = 0.22
+        local startTime = tick()
         
-        task.wait(0.2)
-        isSnapping = false
+        local connection
+        connection = RunService.RenderStepped:Connect(function()
+            local elapsed = tick() - startTime
+            local alpha = elapsed / duration
+            
+            if alpha >= 1 or not targetRoot.Parent then
+                connection:Disconnect()
+                isOrbiting = false
+                return
+            end
+            
+            -- Calculate circular arc loop trajectory around target
+            local angle = alpha * math.pi * 1.5
+            local offsetX = math.cos(angle) * radius
+            local offsetZ = math.sin(angle) * radius
+            
+            local targetPos = targetRoot.Position
+            local newPos = targetPos + Vector3.new(offsetX, 1.5, offsetZ)
+            
+            -- Instantly snap and face the target throughout the arc loop
+            rootPart.CFrame = CFrame.new(newPos, targetPos)
+        end)
     end
 end
 
+-- Automatic Animation & Dash Trigger (Inspired by KittyWare event hooks)[span_2](start_span)[span_2](end_span)
+local function setupAutoOrbitTracker(char)
+    local humanoid = char:WaitForChild("Humanoid", 5)
+    if not humanoid then return end
+    
+    local animator = humanoid:WaitForChild("Animator", 5)
+    if not animator then return end
+    
+    animator.AnimationPlayed:Connect(function(track)
+        if not magnetEnabled or isOrbiting then return end
+        
+        local animName = track.Name:lower()
+        local isDash = animName:find("dash") or animName:find("evade") or animName:find("dodge")
+        local isSideOrBack = animName:find("side") or animName:find("back") or animName:find("left") or animName:find("right")
+        
+        -- Trigger automatically on front dashes
+        if isDash and not isSideOrBack then
+            if tick() - lastOrbitTick > 0.6 then
+                lastOrbitTick = tick()
+                task.spawn(performAutomaticOrbit)
+            end
+        end
+    end)
+end
+
+if LocalPlayer.Character then
+    setupAutoOrbitTracker(LocalPlayer.Character)
+end
+LocalPlayer.CharacterAdded:Connect(setupAutoOrbitTracker)
+
 ---------------------------------------------------------
--- MOBILE UI CREATION
+-- MOBILE UI CREATION (FULLY AUTOMATIC)
 ---------------------------------------------------------
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "SolitudeSimpleGui"
@@ -91,29 +145,7 @@ local hsCorner = Instance.new("UICorner")
 hsCorner.CornerRadius = UDim.new(0, 10)
 hsCorner.Parent = hideShowBtn
 
--- 2. ONE-TAP COMBO BUTTON (Draggable anywhere on screen)
-local comboBtn = Instance.new("TextButton")
-comboBtn.Name = "ComboSnapButton"
-comboBtn.Size = UDim2.new(0, 70, 0, 70)
-comboBtn.Position = UDim2.new(0.82, 0, 0.45, 0)
-comboBtn.BackgroundColor3 = Color3.fromRGB(0, 140, 255)
-comboBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-comboBtn.Text = "DASH\nSNAP"
-comboBtn.TextSize = 14
-comboBtn.Font = Enum.Font.SourceSansBold
-comboBtn.Active = true
-comboBtn.Draggable = true
-comboBtn.Parent = screenGui
-
-local comboCorner = Instance.new("UICorner")
-comboCorner.CornerRadius = UDim.new(0, 35)
-comboCorner.Parent = comboBtn
-
-comboBtn.MouseButton1Click:Connect(function()
-    performComboSnap()
-end)
-
--- 3. MAIN MENU FRAME
+-- 2. MAIN MENU FRAME
 local frame = Instance.new("Frame")
 frame.Name = "MainFrame"
 frame.Size = UDim2.new(0, 230, 0, 260)
@@ -281,3 +313,5 @@ rangeSliderBg.MouseButton1Down:Connect(function()
     local percentage = relativeX / rangeSliderBg.AbsoluteSize.X
     updateRange(math.floor(10 + (percentage * (100 - 10))))
 end)
+
+print("Fraudmaxxing v1-By mingo loaded with Fully Automatic Solitude Orbit!")
