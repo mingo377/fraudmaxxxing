@@ -1,7 +1,12 @@
--- Load the Orion UI Library
-local OrionLib = loadstring(game:HttpGet('https://raw.githubusercontent.com/shlexware/Orion/main/source'))()
+-- Load working UI Library
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/7GrandDadPGN/VapeV4ForRoblox/main/CustomModules/6872274481.lua"))()
 
--- Create the Main Window
+-- If you prefer standard Orion, use this alternative direct mirror:
+-- local OrionLib = loadstring(game:HttpGet('https://raw.githubusercontent.com/jensonhirst/Orion/main/source'))()
+
+local OrionLib = loadstring(game:HttpGet('https://raw.githubusercontent.com/jensonhirst/Orion/main/source'))()
+
+-- Create Window
 local Window = OrionLib:MakeWindow({
     Name = "Solitude | Dash Helper",
     HidePremium = false,
@@ -9,37 +14,33 @@ local Window = OrionLib:MakeWindow({
     ConfigFolder = "SolitudeConfig"
 })
 
--- Create a Tab
+-- Create Tab
 local Tab = Window:MakeTab({
     Name = "Main Controls",
     Icon = "rbxassetid://4483345998",
     PremiumOnly = false
 })
 
--- Add a Toggle
+-- Add Toggle
 Tab:AddToggle({
     Name = "Dash Helper Enabled",
     Default = false,
     Callback = function(Value)
         print("Dash helper toggled:", Value)
-        -- Your dash helper code logic goes here
     end    
 })
 
--- Add a Slider
+-- Add Slider
 Tab:AddSlider({
     Name = "Dash Delay",
     Min = 0,
     Max = 1,
     Default = 0.1,
-    Color = Color3.fromRGB(255,255,255),
     Increment = 0.05,
     ValueName = "Seconds",
     Callback = function(Value)
         print("Delay set to:", Value)
-        -- Your delay logic goes here
     end    
 })
 
--- Initialize the UI
 OrionLib:Init()
