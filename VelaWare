@@ -48,6 +48,7 @@ local animId2 = "10480793962"
 local animId3 = "10480796021"
 local animId4 = "10503381238"
 local animId5 = "13379003796"
+local animId6 = "10491993682"
 
 local liveFolder = workspace:FindFirstChild("Live") or workspace
 
@@ -571,24 +572,27 @@ function PlayerFx.dashMultiplier(vel)
     return 1
 end
 
--- works on any device: scales the game's own dash velocity object when it appears on the root part
-function PlayerFx.hookDash(root)
+-- KittyWare's trigger: the game adds a "dodgevelocity" object to your character on a side/back dash;
+-- 0.05s later the root velocity is scaled (skipped while animId6 is playing)
+function PlayerFx.onDash()
+    task.spawn(function()
+        task.wait(0.05)
+        if not currentRootPart or not currentHumanoid then return end
+        if isAnimationPlaying(animId6, currentHumanoid) then return end
+        local vel = currentRootPart.AssemblyLinearVelocity
+        local mult = PlayerFx.dashMultiplier(vel)
+        if mult ~= 1 then
+            dbg("dash scaled x" .. string.format("%.2f", mult))
+            currentRootPart.AssemblyLinearVelocity = Vector3.new(vel.X * mult, vel.Y, vel.Z * mult)
+        end
+    end)
+end
+
+function PlayerFx.hookDash(char)
     if PlayerFx.dashConn then PlayerFx.dashConn:Disconnect(); PlayerFx.dashConn = nil end
-    if not root then return end
-    PlayerFx.dashConn = root.ChildAdded:Connect(function(obj)
-        if not (obj:IsA("BodyVelocity") or obj:IsA("LinearVelocity")) then return end
-        task.spawn(function()
-            task.wait() -- let the game set the velocity first
-            if not obj.Parent then return end
-            local isBV = obj:IsA("BodyVelocity")
-            local vel = isBV and obj.Velocity or obj.VectorVelocity
-            local mult = PlayerFx.dashMultiplier(vel)
-            if mult ~= 1 then
-                PlayerFx.lastDash = tick()
-                local scaled = Vector3.new(vel.X * mult, vel.Y, vel.Z * mult)
-                if isBV then obj.Velocity = scaled else obj.VectorVelocity = scaled end
-            end
-        end)
+    if not char then return end
+    PlayerFx.dashConn = char.DescendantAdded:Connect(function(d)
+        if d.Name == "dodgevelocity" then PlayerFx.onDash() end
     end)
 end
 
@@ -608,24 +612,6 @@ function PlayerFx.init()
         if head.Transparency ~= 1 then head.Transparency = 1 end
         local face = head:FindFirstChild("face")
         if face and face.Transparency ~= 1 then face.Transparency = 1 end
-    end)
-    -- PC fallback: if the dash had no velocity object, scale the root velocity instead
-    UIS.InputBegan:Connect(function(input, gp)
-        if gp or input.KeyCode ~= Enum.KeyCode.Q then return end
-        local side = UIS:IsKeyDown(Enum.KeyCode.A) or UIS:IsKeyDown(Enum.KeyCode.D)
-        local back = UIS:IsKeyDown(Enum.KeyCode.S)
-        local mult = 1
-        if side and Settings.Player.SideDashEnabled then mult = Settings.Player.SideDashRange / 15
-        elseif back and Settings.Player.BackDashEnabled then mult = Settings.Player.BackDashRange / 15 end
-        if mult == 1 then return end
-        local pressed = tick()
-        task.delay(0.15, function()
-            if PlayerFx.lastDash >= pressed then return end -- already scaled via the dash object
-            if currentRootPart then
-                local vel = currentRootPart.AssemblyLinearVelocity
-                currentRootPart.AssemblyLinearVelocity = Vector3.new(vel.X * mult, vel.Y, vel.Z * mult)
-            end
-        end)
     end)
 end
 safe("player features", PlayerFx.init)
@@ -928,9 +914,9 @@ safe("player tab", function()
         Settings.Player.WalkSpeed = v
         if Settings.Player.WalkSpeedEnabled and currentHumanoid then currentHumanoid.WalkSpeed = v end
     end, true)
-    addToggle(playerTab, "Side Dash Override", "Custom side dash range", Settings.Player.SideDashEnabled, function(on) Settings.Player.SideDashEnabled = on end)
+    addToggle(playerTab, "Side Dash Override", "Side dash length (15 = normal, 30 = 2x)", Settings.Player.SideDashEnabled, function(on) Settings.Player.SideDashEnabled = on end)
     addTextbox(playerTab, "Side Dash Range", "", Settings.Player.SideDashRange, function(v) Settings.Player.SideDashRange = v end, true)
-    addToggle(playerTab, "Back Dash Override", "Custom back dash range", Settings.Player.BackDashEnabled, function(on) Settings.Player.BackDashEnabled = on end)
+    addToggle(playerTab, "Back Dash Override", "Back dash length (15 = normal, 30 = 2x)", Settings.Player.BackDashEnabled, function(on) Settings.Player.BackDashEnabled = on end)
     addTextbox(playerTab, "Back Dash Range", "", Settings.Player.BackDashRange, function(v) Settings.Player.BackDashRange = v end, true)
 
     addSection(playerTab, "Utility")
@@ -1021,8 +1007,12 @@ minDot.MouseButton1Click:Connect(function() minimized = not minimized; tween(win
 maxDot.MouseButton1Click:Connect(function() minimized = false; tween(window, 0.5, { Size = UDim2.fromOffset(WIN_W, WIN_H) }, Enum.EasingStyle.Quint) end)
 
 -- RightShift hides/shows the menu (works on every device with a keyboard)
-UIS.InputBegan:Connect(function(input, processed)
-    if not processed and input.KeyCode == Enum.KeyCode.RightShift then setOpen(not isOpen) end
+UIS.InputBegan:Connect(function(input)
+    -- no "processed" check on purpose: Roblox's shift-lock binds RightShift via ContextActionService,
+    -- which marks the key as already processed and made this never fire
+    if input.KeyCode == Enum.KeyCode.RightShift and not UIS:GetFocusedTextBox() then
+        setOpen(not isOpen)
+    end
 end)
 
 -- ===== KittyWare Execution Pipeline =====
@@ -1047,7 +1037,7 @@ local function onCharacterAdded(char)
 
     safe("player visuals", function()
         PlayerFx.apply(char)
-        PlayerFx.hookDash(currentRootPart)
+        PlayerFx.hookDash(char)
         if Settings.Player.WalkSpeedEnabled then currentHumanoid.WalkSpeed = Settings.Player.WalkSpeed end
     end)
 
