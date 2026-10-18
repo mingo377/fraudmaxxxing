@@ -1,6 +1,6 @@
 print("[Velaware] Script starting...")
 
--- VelaUI.lua (Velaware-Mingo Liquid Glass Edition + Player Tab) -- FIXED
+-- VelaUI.lua (Velaware-Mingo Liquid Glass Edition + Player Tab)
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
@@ -9,6 +9,12 @@ local Lighting = game:GetService("Lighting")
 local Stats = game:GetService("Stats")
 
 local player = Players.LocalPlayer
+
+-- runs a feature setup step; if it errors it prints why instead of killing the whole script
+local function safe(name, fn)
+    local ok, err = pcall(fn)
+    if not ok then warn("[Velaware] " .. name .. " failed: " .. tostring(err)) end
+end
 
 -- ===== Settings =====
 local TITLE = "Velaware-Mingo"
@@ -24,15 +30,17 @@ local FONT_BOLD = Enum.Font.GothamBold
 local WIN_W, WIN_H, BAR_H = 400, 250, 32
 local BLUR_SIZE = 6
 
+-- image can be "rbxassetid://ID", "file:name.png" (executor workspace) or "url:https://..."
+-- entries with cols/rows/frames/fps/w/h are animated flipbooks; image = "" entries are hidden
 local DEFAULT_BG = "Silhouette"
 local BACKGROUNDS = {
-    { name = "Static",     image = BG_IMAGE },
+    { name = "Static", image = BG_IMAGE },
     { name = "Silhouette", image = "rbxassetid://120306120997150", cols = 4, rows = 6, frames = 24, fps = 7,  w = 256, h = 160 },
     { name = "Blue Hat",   image = "", cols = 3, rows = 4, frames = 12, fps = 10, w = 341, h = 213 },
     { name = "Beach Girl", image = "", cols = 3, rows = 3, frames = 8,  fps = 10, w = 341, h = 213 },
 }
 
--- ===== Core Variables & Settings =====
+-- ===== KittyWare Core Variables & Settings =====
 local currentCharacter, currentHumanoid, currentRootPart, currentCommunicate, currentAnimator
 local counterTool
 local animId1 = "10479335397"
@@ -52,20 +60,17 @@ end
 local function pingCompensatedRange(range) return range + (pingScaledDelay() - 50) * -0.0003846 end
 
 local leftclick = {
-    holdM1      = { Goal = "LeftClick" },
-    releaseM1   = { Goal = "LeftClickRelease" },
-    frontDash   = { Dash = Enum.KeyCode.W, Key = Enum.KeyCode.Q, Goal = "KeyPress" },
-    holdBlock   = { Goal = "KeyPress",   Key = Enum.KeyCode.F },
-    releaseBlock= { Goal = "KeyRelease", Key = Enum.KeyCode.F },
+    holdM1 = { Goal = "LeftClick" },
+    releaseM1 = { Goal = "LeftClickRelease" },
+    frontDash = { Dash = Enum.KeyCode.W, Key = Enum.KeyCode.Q, Goal = "KeyPress" },
+    holdBlock = { Goal = "KeyPress", Key = Enum.KeyCode.F },
+    releaseBlock = { Goal = "KeyRelease", Key = Enum.KeyCode.F },
 }
 
--- FIX 1: AutoCounter = false was missing, causing the toggle to reference nil
 local Settings = {
     Autoblock = {
-        Enabled = false, Debug = false, BlockHold = 0.25, DashPredict = true,
-        RotateChar = true, RotateCam = true, CharEasing = 0, CamEasing = 0,
-        FOV = 180, Range = 9,
-        AutoCounter = false,  -- ADDED: was nil, toggle never had a backing value
+        Enabled = false, Debug = false, BlockHold = 0.25, DashPredict = true, AutoCounter = false,
+        RotateChar = true, RotateCam = true, CharEasing = 0, CamEasing = 0, FOV = 180, Range = 9,
     },
     AutoTech = {
         Enabled = false, Tech = "Loop Dash",
@@ -77,13 +82,17 @@ local Settings = {
     },
     Player = {
         WalkSpeedEnabled = false, WalkSpeed = 16,
-        SideDashEnabled  = false, SideDashRange = 15,
-        BackDashEnabled  = false, BackDashRange  = 15,
+        SideDashEnabled = false, SideDashRange = 15,
+        BackDashEnabled = false, BackDashRange = 15,
         AntiDeathCounter = false,
         Headless = false,
-        Korblox  = false,
+        Korblox = false,
     }
 }
+
+local function dbg(...)
+    if Settings.Autoblock.Debug then print("[Velaware]", ...) end
+end
 
 -- ===== Cooldown Detector =====
 local isDashOnCooldown = false
@@ -113,20 +122,20 @@ local function isAnimationPlaying(animId, hum)
     return false
 end
 
--- ===== Autoblock Backend =====
-local counterLikeAttrs = { "Counter","AbsoluteImmortal","AtomicCounter","HunterCounter","UpFrames","Ragdoll","ForceField","CanBringUp" }
-local enemyBusyAttrs   = { "DoingEmote","CancelEmote","CancelEmote2","BeingLaunched","Freeze" }
-local localBusyAttrs   = { "Counter","HunterCounter","DoingEmote","CancelEmote","CancelEmote2","BeingLaunched","Ragdoll","Freeze","BarrageBind" }
-local interruptMoves   = { "Shove","Normal Punch","Uppercut","Flowing Water","Lethal Whirlwind Stream","Hunter's Grasp","Doom Dive","Crowd Buster","Hammer Heel","Binding Cloth","Jet Dive","Blitz Shot","Ignition Burst","Flash Strike","Scatter","Explosive Shuriken","Homerun","Beatdown","Four Ball","Quick Slice","Atmos Cleave","Pinpoint Cut","Crushing Pull","Windstorm Fury","Stone Coffin","Expulsive Push","GoPush","Vanishing Kick","Whirlwind Drop","Head First","Weboom","Plasma Cannon","Trinity Tear","Twin Burst","TornadoBind" }
-local barrageMoves     = { "Consecutive Punches","Machine Gun Blows","Bullet Barrage" }
-local Distances        = { FarDash = 28, NearDash = 22, Barrage = 18, MovingM1 = 15, M1 = 9 }
+-- ===== KittyWare Autoblock Backend =====
+local counterLikeAttrs = { "Counter", "AbsoluteImmortal", "AtomicCounter", "HunterCounter", "UpFrames", "Ragdoll", "ForceField", "CanBringUp" }
+local enemyBusyAttrs = { "DoingEmote", "CancelEmote", "CancelEmote2", "BeingLaunched", "Freeze" }
+local localBusyAttrs = { "Counter", "HunterCounter", "DoingEmote", "CancelEmote", "CancelEmote2", "BeingLaunched", "Ragdoll", "Freeze", "BarrageBind" }
+local interruptMoves = { "Shove", "Normal Punch", "Uppercut", "Flowing Water", "Lethal Whirlwind Stream", "Hunter's Grasp", "Doom Dive", "Crowd Buster", "Hammer Heel", "Binding Cloth", "Jet Dive", "Blitz Shot", "Ignition Burst", "Flash Strike", "Scatter", "Explosive Shuriken", "Homerun", "Beatdown", "Four Ball", "Quick Slice", "Atmos Cleave", "Pinpoint Cut", "Crushing Pull", "Windstorm Fury", "Stone Coffin", "Expulsive Push", "GoPush", "Vanishing Kick", "Whirlwind Drop", "Head First", "Weboom", "Plasma Cannon", "Trinity Tear", "Twin Burst", "TornadoBind" }
+local barrageMoves = { "Consecutive Punches", "Machine Gun Blows", "Bullet Barrage" }
+local Distances = { FarDash = 28, NearDash = 22, Barrage = 18, MovingM1 = 15, M1 = 9 }
 
 local function buildSet(arr) local s = {}; for _, v in ipairs(arr) do s[v] = true end; return s end
-local counterLikeSet   = buildSet(counterLikeAttrs)
-local enemyBusySet     = buildSet(enemyBusyAttrs)
-local localBusySet     = buildSet(localBusyAttrs)
-local interruptMovesSet= buildSet(interruptMoves)
-local barrageMovesSet  = buildSet(barrageMoves)
+local counterLikeSet = buildSet(counterLikeAttrs)
+local enemyBusySet = buildSet(enemyBusyAttrs)
+local localBusySet = buildSet(localBusyAttrs)
+local interruptMovesSet = buildSet(interruptMoves)
+local barrageMovesSet = buildSet(barrageMoves)
 
 local function isFlingTargetValid(char, ignoreSet)
     if not char then return false end
@@ -136,8 +145,10 @@ end
 
 local function angleBetweenCFrames(part)
     if not currentRootPart or not part then return 0 end
-    local look = Vector3.new(currentRootPart.CFrame.LookVector.X, 0, currentRootPart.CFrame.LookVector.Z).Unit
-    local vec  = part.Position - currentRootPart.Position
+    local flatLook = Vector3.new(currentRootPart.CFrame.LookVector.X, 0, currentRootPart.CFrame.LookVector.Z)
+    if flatLook.Magnitude < 0.001 then return 0 end
+    local look = flatLook.Unit
+    local vec = part.Position - currentRootPart.Position
     vec = Vector3.new(vec.X, 0, vec.Z)
     if vec.Magnitude == 0 then return 0 end
     return math.deg(math.acos(math.clamp(look:Dot(vec.Unit), -1, 1)))
@@ -148,8 +159,8 @@ local function isWithinFieldOfView(part, fov)
 end
 
 local blockActive = false
-local function fireHoldBlock()    if not blockActive and currentCommunicate then blockActive = true;  currentCommunicate:FireServer(leftclick.holdBlock)    end end
-local function fireReleaseBlock() if blockActive  and currentCommunicate then blockActive = false; currentCommunicate:FireServer(leftclick.releaseBlock) end end
+local function fireHoldBlock() if not blockActive and currentCommunicate then blockActive = true; currentCommunicate:FireServer(leftclick.holdBlock) end end
+local function fireReleaseBlock() if blockActive and currentCommunicate then blockActive = false; currentCommunicate:FireServer(leftclick.releaseBlock) end end
 
 local function makeRotCFrame(pos, yaw, pitch)
     workspace.CurrentCamera.CFrame = CFrame.new(pos) * CFrame.Angles(0, yaw, 0) * CFrame.Angles(pitch, 0, 0)
@@ -158,18 +169,21 @@ end
 local function startSmoothRotateCamToPos(targetPos, duration)
     duration = duration or 0
     local startTick = tick()
-    local startCF   = workspace.CurrentCamera.CFrame
-    local startPos  = startCF.Position
+    local startCF = workspace.CurrentCamera.CFrame
+    local startPos = startCF.Position
     local targetVector = (targetPos - startPos)
     if targetVector.Magnitude < 0.1 then return end
     targetVector = targetVector.Unit
-    local startYaw  = math.atan2(-startCF.LookVector.X, -startCF.LookVector.Z)
-    local targetYaw = math.atan2(-targetVector.X,       -targetVector.Z)
-    local pitch     = math.asin(startCF.LookVector.Y)
-    if duration <= 0 then makeRotCFrame(startPos, targetYaw, pitch); return end
+    local startYaw = math.atan2(-startCF.LookVector.X, -startCF.LookVector.Z)
+    local targetYaw = math.atan2(-targetVector.X, -targetVector.Z)
+    local pitch = math.asin(math.clamp(startCF.LookVector.Y, -1, 1))
+    if duration <= 0 then
+        makeRotCFrame(startPos, targetYaw, pitch)
+        return
+    end
     local name = "VelaSmoothRotateCamPos" .. tick()
     RunService:BindToRenderStep(name, Enum.RenderPriority.Camera.Value + 1, function()
-        local t     = math.clamp((tick() - startTick) / duration, 0, 1)
+        local t = math.clamp((tick() - startTick) / duration, 0, 1)
         local alpha = t * t * (3 - 2 * t)
         local finalYaw = startYaw + (targetYaw - startYaw) * alpha
         makeRotCFrame(startPos, finalYaw, pitch)
@@ -181,32 +195,37 @@ local function characterRotateEasing(part, hum, duration)
     duration = duration or 0
     local conn
     conn = RunService.Heartbeat:Connect(function(dt)
-        if not part.Parent or not currentRootPart or not currentRootPart.Parent
-            or hum.Health <= 0 or currentHumanoid.Health <= 0 then
-            conn:Disconnect(); return
+        if not part.Parent or not currentRootPart or not currentRootPart.Parent or hum.Health <= 0 or currentHumanoid.Health <= 0 then
+            conn:Disconnect()
+            return
         end
         if isFlingTargetValid(currentRootPart.Parent, localBusySet) then
             currentHumanoid.AutoRotate = false
-            local cf        = currentRootPart.CFrame
+            local cf = currentRootPart.CFrame
             local targetPos = Vector3.new(part.Position.X, cf.Position.Y, part.Position.Z)
-            local targetCF  = CFrame.new(cf.Position, targetPos)
-            pcall(function()  -- FIX: CFrame assignment can error without ownership
-                if duration <= 0 then currentRootPart.CFrame = targetCF
-                else                   currentRootPart.CFrame = cf:Lerp(targetCF, math.clamp(dt / duration, 0, 1)) end
-            end)
+            local targetCF = CFrame.new(cf.Position, targetPos)
+            if duration <= 0 then currentRootPart.CFrame = targetCF
+            else currentRootPart.CFrame = cf:Lerp(targetCF, math.clamp(dt / duration, 0, 1)) end
         end
     end)
     return conn
 end
 
 local function stopRotate(conn)
-    if conn then conn:Disconnect(); if currentHumanoid then currentHumanoid.AutoRotate = true end end
+    if conn then
+        conn:Disconnect()
+        if currentHumanoid then currentHumanoid.AutoRotate = true end
+    end
 end
 
 local function autoblockEasingTick(part, hum)
     local conn
-    if Settings.Autoblock.RotateChar then conn = characterRotateEasing(part, hum, Settings.Autoblock.CharEasing) end
-    if Settings.Autoblock.RotateCam  then startSmoothRotateCamToPos(part.Position, Settings.Autoblock.CamEasing) end
+    if Settings.Autoblock.RotateChar then
+        conn = characterRotateEasing(part, hum, Settings.Autoblock.CharEasing)
+    end
+    if Settings.Autoblock.RotateCam then
+        startSmoothRotateCamToPos(part.Position, Settings.Autoblock.CamEasing)
+    end
     return conn
 end
 
@@ -219,27 +238,32 @@ local function dashVelocityGuard(part)
 end
 
 local function autoCounterCast(enemyRoot, enemyHum, dashPredicted)
-    local hotbar    = player.PlayerGui:FindFirstChild("Hotbar")
-    local backpack  = hotbar  and hotbar:FindFirstChild("Backpack")
+    local hotbar = player.PlayerGui:FindFirstChild("Hotbar")
+    local backpack = hotbar and hotbar:FindFirstChild("Backpack")
     local hotbarGui = backpack and backpack:FindFirstChild("Hotbar")
-    local slot4     = hotbarGui and hotbarGui:FindFirstChild("4")
-    local base      = slot4   and slot4:FindFirstChild("Base")
-    local cooldown  = base    and base:FindFirstChild("Cooldown")
+    local slot4 = hotbarGui and hotbarGui:FindFirstChild("4")
+    local base = slot4 and slot4:FindFirstChild("Base")
+    local cooldown = base and base:FindFirstChild("Cooldown")
 
     if dashPredicted or cooldown or not counterTool or not Settings.Autoblock.AutoCounter then
         return true
     elseif counterTool then
         currentCommunicate:FireServer({
-            IsAutoActivate = true, Goal = "Console Move",
-            Tool = counterTool,    ToolName = counterTool.Name,
+            IsAutoActivate = true,
+            Goal = "Console Move",
+            Tool = counterTool,
+            ToolName = counterTool.Name,
         })
         return false
     end
     return true
 end
 
+-- holds block for BlockHold seconds (no M1 punish)
 local function autoblockDistanceState(part, hum, dashPredicted)
-    if currentCharacter:FindFirstChild("Counter") then return end
+    if currentCharacter:FindFirstChild("Counter") then
+        return
+    end
     fireHoldBlock()
     local conn = autoblockEasingTick(part, hum)
     task.wait(pingCompensatedRange(Settings.Autoblock.BlockHold or 0.25))
@@ -248,31 +272,41 @@ local function autoblockDistanceState(part, hum, dashPredicted)
 end
 
 local function autoblockRotateLoop(part, hum, char, dashPredicted)
-    local charConn  = autoblockEasingTick(part, hum)
+    local charConn = autoblockEasingTick(part, hum)
     local startTick = tick()
     local loopConn
     loopConn = RunService.Heartbeat:Connect(function()
         fireHoldBlock()
         if char:FindFirstChild("NoBlock") or (currentRootPart.Position - part.Position).Magnitude >= Distances.Barrage + 5 then
-            stopRotate(charConn); loopConn:Disconnect(); fireReleaseBlock(); return
+            stopRotate(charConn)
+            loopConn:Disconnect()
+            fireReleaseBlock()
+            return
         end
         if math.clamp((tick() - startTick) / 0.1, 0, 1) >= 1 and not char:FindFirstChild("Slowed") then
-            stopRotate(charConn); loopConn:Disconnect(); fireReleaseBlock()
+            stopRotate(charConn)
+            loopConn:Disconnect()
+            fireReleaseBlock()
         end
     end)
 end
 
+local function busyNames(char, set)
+    local t = {}
+    for _, c in ipairs(char:GetChildren()) do if set[c.Name] then t[#t + 1] = c.Name end end
+    return table.concat(t, ",")
+end
+
 local function watchEnemyModel(desc)
     if not desc or not Settings.Autoblock.Enabled then return end
-    local name       = desc.Name
-    local isM1ing    = name == "M1ing"
-    local isInterrupt= interruptMovesSet[name]
-    local isBarrage  = barrageMovesSet[name]
+    local name = desc.Name
+    local isM1ing = name == "M1ing"
+    local isInterrupt = interruptMovesSet[name]
+    local isBarrage = barrageMovesSet[name]
     if not (isM1ing or isInterrupt or isBarrage) then return end
-    if not currentRootPart or not currentCharacter or not currentHumanoid or not currentCommunicate then return end
 
-    local model = desc:FindFirstAncestorWhichIsA("Model")
-        or (desc.Parent and desc.Parent:FindFirstAncestorWhichIsA("Model"))
+    if not currentRootPart or not currentCharacter or not currentHumanoid or not currentCommunicate then return end
+    local model = desc:FindFirstAncestorWhichIsA("Model") or (desc.Parent and desc.Parent:FindFirstAncestorWhichIsA("Model"))
     if model and not model:FindFirstChild("HumanoidRootPart") then
         local p = model.Parent
         while p and p ~= workspace do
@@ -281,88 +315,87 @@ local function watchEnemyModel(desc)
         end
     end
     if not model or model == currentCharacter then return end
-
-    local enemyHum  = model:FindFirstChild("Humanoid")
+    local enemyHum = model:FindFirstChild("Humanoid")
     local enemyRoot = model:FindFirstChild("HumanoidRootPart")
     if not enemyHum or not enemyRoot then return end
     if currentHumanoid.Health <= 0 or enemyHum.Health <= 0 then return end
 
-    local m1Range     = Settings.Autoblock.Range or 9
-    local dist        = (currentRootPart.Position - enemyRoot.Position).Magnitude
-    local isMovingM1  = dist <= (m1Range + 6) and dashVelocityGuard(enemyRoot)
-    local isDashPredicted = Settings.Autoblock.DashPredict
-        and (isAnimationPlaying(animId3, enemyHum) or isAnimationPlaying(animId2, enemyHum))
-        and dist <= (m1Range + 19)
+    local m1Range = Settings.Autoblock.Range or 9
+    local dist = (currentRootPart.Position - enemyRoot.Position).Magnitude
+    dbg(string.format("%s from %s | dist %.1f", name, model.Name, dist))
+    local isMovingM1 = dist <= (m1Range + 6) and dashVelocityGuard(enemyRoot)
+    local isDashPredicted = Settings.Autoblock.DashPredict and (isAnimationPlaying(animId3, enemyHum) or isAnimationPlaying(animId2, enemyHum)) and dist <= (m1Range + 19)
+    if not (dist <= m1Range or isMovingM1 or isDashPredicted) then dbg("skip: out of range") return end
+    if not isFlingTargetValid(currentCharacter, localBusySet) then dbg("skip: you are busy (" .. busyNames(currentCharacter, localBusySet) .. ")") return end
+    if not isFlingTargetValid(model, enemyBusySet) then dbg("skip: enemy busy (" .. busyNames(model, enemyBusySet) .. ")") return end
+    if not isWithinFieldOfView(enemyRoot, Settings.Autoblock.FOV) then dbg("skip: outside FOV") return end
+    if not autoCounterCast(enemyRoot, enemyHum, isMovingM1) then dbg("auto counter used instead of block") return end
 
-    if not (dist <= m1Range or isMovingM1 or isDashPredicted) then return end
-    if not isFlingTargetValid(currentCharacter, localBusySet) then return end
-    if not isFlingTargetValid(model, enemyBusySet) then return end
-    if not isWithinFieldOfView(enemyRoot, Settings.Autoblock.FOV) then return end
-    if not autoCounterCast(enemyRoot, enemyHum, isMovingM1) then return end
-
-    if isM1ing    then autoblockDistanceState(enemyRoot, enemyHum, isDashPredicted)
+    if isM1ing then autoblockDistanceState(enemyRoot, enemyHum, isDashPredicted)
     elseif isInterrupt then autoblockDistanceState(enemyRoot, enemyHum, isDashPredicted)
-    elseif isBarrage   then autoblockRotateLoop(enemyRoot, enemyHum, model, isDashPredicted) end
+    elseif isBarrage then autoblockRotateLoop(enemyRoot, enemyHum, model, isDashPredicted) end
 end
 
--- ===== Tech Math =====
+-- ===== KittyWare Tech Math =====
+-- hardened version: camera nil check, precision clamp, zero-length guard, asin clamp.
+-- (character/camera rotation rules are the original ones: lockChar rotates the character,
+--  the camera only rotates when lockChar is false or rotateCam is true)
 local function computeLockAngles(angle, targetPos, lockChar, rotateCam, precision)
     if not currentRootPart or not currentHumanoid then return end
-    precision = precision or 1
-    local camCF  = workspace.CurrentCamera.CFrame
-    local camPos = camCF.Position
-    if UIS.MouseBehavior == Enum.MouseBehavior.LockCenter then camPos = camPos - camCF.RightVector * 1.75 end
+    local camera = workspace.CurrentCamera
+    if not camera then return end
+    precision = math.clamp(tonumber(precision) or 1, 0, 1)
 
-    local currentYaw, targetYaw
-    if targetPos then
-        local targetVector
-        if lockChar then
-            targetVector = (targetPos - currentRootPart.Position).Unit
-            currentYaw   = math.atan2(-currentRootPart.CFrame.LookVector.X, -currentRootPart.CFrame.LookVector.Z)
-        else
-            targetVector = (targetPos - camPos).Unit
-            currentYaw   = math.atan2(-camCF.LookVector.X, -camCF.LookVector.Z)
-        end
-        targetYaw = math.atan2(-targetVector.X, -targetVector.Z)
-    else
-        local lookV = lockChar and currentRootPart.CFrame.LookVector or camCF.LookVector
-        currentYaw  = math.atan2(-lookV.X, -lookV.Z)
-        targetYaw   = currentYaw + math.rad(angle or 0)
+    local camCF = camera.CFrame
+    local camPos = camCF.Position
+    if UIS.MouseBehavior == Enum.MouseBehavior.LockCenter then
+        camPos = camPos - camCF.RightVector * 1.75
     end
 
-    local diff     = math.atan2(math.sin(targetYaw - currentYaw), math.cos(targetYaw - currentYaw))
+    local look = lockChar and currentRootPart.CFrame.LookVector or camCF.LookVector
+    local currentYaw = math.atan2(-look.X, -look.Z)
+    local targetYaw
+    if targetPos then
+        local origin = lockChar and currentRootPart.Position or camPos
+        local direction = targetPos - origin
+        if direction.Magnitude < 0.001 then return end
+        targetYaw = math.atan2(-direction.X, -direction.Z)
+    else
+        targetYaw = currentYaw + math.rad(tonumber(angle) or 0)
+    end
+
+    local diff = math.atan2(math.sin(targetYaw - currentYaw), math.cos(targetYaw - currentYaw))
     local finalYaw = currentYaw + diff * precision
-    local doChar   = lockChar or rotateCam
-    local doCam    = (not lockChar) or rotateCam
+
+    local doChar = lockChar or rotateCam
+    local doCam = (not lockChar) or rotateCam
 
     if doChar then
         currentHumanoid.AutoRotate = false
-        pcall(function()
-            currentRootPart.CFrame = CFrame.new(currentRootPart.Position) * CFrame.Angles(0, finalYaw, 0)
-        end)
-        if not doCam then return end
+        currentRootPart.CFrame = CFrame.new(currentRootPart.Position) * CFrame.Angles(0, finalYaw, 0)
     end
-    makeRotCFrame(camCF.Position, finalYaw, math.asin(camCF.LookVector.Y))
+    if doCam then
+        makeRotCFrame(camCF.Position, finalYaw, math.asin(math.clamp(camCF.LookVector.Y, -1, 1)))
+    end
 end
 
 local function startSmoothRotateCamera(angle, duration, rotateChar)
     local startTick = tick()
-    local startCF   = rotateChar and currentRootPart.CFrame or workspace.CurrentCamera.CFrame
-    local startYaw  = math.atan2(-startCF.LookVector.X, -startCF.LookVector.Z)
+    local startCF = rotateChar and currentRootPart.CFrame or workspace.CurrentCamera.CFrame
+    local startYaw = math.atan2(-startCF.LookVector.X, -startCF.LookVector.Z)
     local targetYaw = startYaw + math.rad(angle)
-    local name      = "VelaSmoothRotate" .. tick()
+    local name = "VelaSmoothRotate" .. tick()
+
     RunService:BindToRenderStep(name, Enum.RenderPriority.Camera.Value + 1, function()
-        local t      = math.clamp((tick() - startTick) / duration, 0, 1)
-        local alpha  = t * t * (3 - 2 * t)
-        local camCF  = workspace.CurrentCamera.CFrame
+        local t = math.clamp((tick() - startTick) / duration, 0, 1)
+        local alpha = t * t * (3 - 2 * t)
+        local camCF = workspace.CurrentCamera.CFrame
         local finalYaw = startYaw + (targetYaw - startYaw) * alpha
         if rotateChar then
             currentHumanoid.AutoRotate = false
-            pcall(function()
-                currentRootPart.CFrame = CFrame.new(currentRootPart.Position) * CFrame.Angles(0, finalYaw, 0)
-            end)
+            currentRootPart.CFrame = CFrame.new(currentRootPart.Position) * CFrame.Angles(0, finalYaw, 0)
         else
-            makeRotCFrame(camCF.Position, finalYaw, math.asin(camCF.LookVector.Y))
+            makeRotCFrame(camCF.Position, finalYaw, math.asin(math.clamp(camCF.LookVector.Y, -1, 1)))
         end
         if t >= 1 then RunService:UnbindFromRenderStep(name) end
     end)
@@ -371,11 +404,9 @@ end
 local function ragdollHealthWatcher(method, duration, targetChar, targetHum, callback)
     local conn
     conn = RunService[method]:Connect(function()
-        if not targetChar or targetChar:FindFirstChild("BeingLaunched")
-            or not targetChar:FindFirstChild("Ragdoll")
-            or not targetHum or targetHum.Health <= 0
-            or not currentHumanoid or currentHumanoid.Health <= 0 then
-            if conn then conn:Disconnect() end; return
+        if not targetChar or targetChar:FindFirstChild("BeingLaunched") or not targetChar:FindFirstChild("Ragdoll") or not targetHum or targetHum.Health <= 0 or not currentHumanoid or currentHumanoid.Health <= 0 then
+            if conn then conn:Disconnect() end
+            return
         end
         callback()
     end)
@@ -385,10 +416,13 @@ local function ragdollHealthWatcher(method, duration, targetChar, targetHum, cal
 end
 
 local function isTargetAbove(targetHRP)
-    local myPos     = currentRootPart.Position
+    local myPos = currentRootPart.Position
     local targetPos = targetHRP.Position
-    local hDist = (Vector3.new(myPos.X, 0, myPos.Z) - Vector3.new(targetPos.X, 0, targetPos.Z)).Magnitude
-    return hDist <= 0.2 and myPos.Y < targetPos.Y
+    local horizontalDist = (Vector3.new(myPos.X, 0, myPos.Z) - Vector3.new(targetPos.X, 0, targetPos.Z)).Magnitude
+    if horizontalDist <= 0.2 and myPos.Y < targetPos.Y then
+        return true
+    end
+    return false
 end
 
 local function doTechSupa(target, hrp, hum)
@@ -396,13 +430,7 @@ local function doTechSupa(target, hrp, hum)
     local offset = hrp.CFrame:PointToObjectSpace(currentRootPart.Position)
     ragdollHealthWatcher("Heartbeat", 0.3, target, hum, function()
         local worldPos = hrp.CFrame:PointToWorldSpace(offset)
-        pcall(function()
-            currentCharacter:PivotTo(CFrame.lookAt(
-                worldPos,
-                Vector3.new(hrp.Position.X, worldPos.Y + 1.5, hrp.Position.Z),
-                Vector3.new(0, 1, 0)
-            ))
-        end)
+        currentCharacter:PivotTo(CFrame.lookAt(worldPos, Vector3.new(hrp.Position.X, worldPos.Y + 1.5, hrp.Position.Z), Vector3.new(0, 1, 0)))
     end)
 end
 
@@ -421,8 +449,10 @@ local function doTechLoopDash(target, hrp, hum)
     local cachedCF = nil
     ragdollHealthWatcher("Heartbeat", 0.4, target, hum, function()
         if cachedCF or isTargetAbove(hrp) then
-            if not cachedCF then cachedCF = currentRootPart.CFrame end
-            pcall(function() currentCharacter:PivotTo(cachedCF) end)
+            if not cachedCF then
+                cachedCF = currentRootPart.CFrame
+            end
+            currentCharacter:PivotTo(cachedCF)
         else
             computeLockAngles(nil, hrp.Position, true)
         end
@@ -432,22 +462,14 @@ end
 local function doTechKiba(target, hrp, hum)
     performDashWithDelay()
     ragdollHealthWatcher("Heartbeat", 0.4, target, hum, function()
-        pcall(function()
-            currentCharacter:PivotTo(CFrame.new(hrp.Position - Vector3.new(0, 3, 2), hrp.Position))
-        end)
+        currentCharacter:PivotTo(CFrame.new(hrp.Position - Vector3.new(0, 3, 2), hrp.Position))
     end)
 end
 
--- FIX 2: AssemblyLinearVelocity assignment wrapped in pcall (no network ownership)
 local function doTechLoopV2(target, hrp, hum)
     local c = Settings.AutoTech.Loopv2
     if c.Jump then
-        pcall(function()
-            currentRootPart.AssemblyLinearVelocity = Vector3.new(
-                currentRootPart.AssemblyLinearVelocity.X, 50,
-                currentRootPart.AssemblyLinearVelocity.Z
-            )
-        end)
+        currentRootPart.AssemblyLinearVelocity = Vector3.new(currentRootPart.AssemblyLinearVelocity.X, 50, currentRootPart.AssemblyLinearVelocity.Z)
     end
     computeLockAngles(c.FirstFlickAngle, nil, true, c.RotateCam)
     performDashWithDelay(c.SecondFlick)
@@ -458,122 +480,186 @@ local function doTechLoopV2(target, hrp, hum)
 end
 
 local TECH_HANDLERS = {
-    ["Supa"]         = doTechSupa,
+    ["Supa"] = doTechSupa,
     ["Lock On Dash"] = doTechLockOn,
-    ["Loop Dash"]    = doTechLoopDash,
-    ["Kiba"]         = doTechKiba,
+    ["Loop Dash"] = doTechLoopDash,
+    ["Kiba"] = doTechKiba,
     ["Loop Dash v2"] = doTechLoopV2,
 }
 
--- ===== Player Visuals & Functions =====
-local function applyHeadless(char)
-    local head = char:FindFirstChild("Head")
-    local face  = head and head:FindFirstChild("face")
-    if Settings.Player.Headless then
-        if head then head.Transparency = 1 end
-        if face then face.Transparency = 1 end
+-- ===== Player tab features =====
+local PlayerFx = { antiDeathConn = nil, dashConn = nil, lastDash = 0 }
+
+function PlayerFx.headless(char)
+    local head = char and char:FindFirstChild("Head")
+    if not head then return end
+    local t = Settings.Player.Headless and 1 or 0
+    head.Transparency = t
+    local face = head:FindFirstChild("face")
+    if face then face.Transparency = t end
+end
+
+function PlayerFx.korblox(char)
+    if not char then return end
+    local leg = char:FindFirstChild("Right Leg") or char:FindFirstChild("RightLowerLeg")
+    local oldMesh = char:FindFirstChild("KittyKorbloxCM")
+    local oldSM = leg and leg:FindFirstChild("KittyKorbloxSM")
+    if Settings.Player.Korblox then
+        if not oldMesh then
+            local cm = Instance.new("CharacterMesh")
+            cm.Name = "KittyKorbloxCM"
+            cm.MeshId = 101851696
+            cm.OverlayTextureId = 101851254
+            cm.BaseTextureId = 101851254
+            cm.BodyPart = Enum.BodyPart.RightLeg
+            cm.Parent = char
+        end
+        if leg and not oldSM then
+            local sm = Instance.new("SpecialMesh")
+            sm.Name = "KittyKorbloxSM"
+            sm.MeshType = Enum.MeshType.FileMesh
+            sm.MeshId = "rbxassetid://101851696"
+            sm.TextureId = "rbxassetid://101851254"
+            sm.Parent = leg
+        end
     else
-        if head then head.Transparency = 0 end
-        if face then face.Transparency = 0 end
+        if oldMesh then oldMesh:Destroy() end
+        if oldSM then oldSM:Destroy() end
     end
 end
 
--- FIX 3: CharacterMesh is deprecated; use HumanoidDescription instead
-local function applyKorblox(char)
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if not hum then return end
-    pcall(function()
-        local desc = hum:GetAppliedDescription()
-        desc.RightLeg = Settings.Player.Korblox and 101851696 or 0
-        hum:ApplyDescription(desc)
-    end)
-end
-
-local function applyPlayerVis(char)
+-- re-applies the visuals after every spawn
+function PlayerFx.apply(char)
     if not char then return end
     task.spawn(function()
         task.wait(0.5)
-        applyHeadless(char)
-        applyKorblox(char)
+        if not char.Parent then return end
+        if Settings.Player.Headless then PlayerFx.headless(char) end
+        if Settings.Player.Korblox then PlayerFx.korblox(char) end
     end)
 end
 
--- FIX 4: counter:Destroy() fails silently without server ownership — wrapped in pcall
-local antiDeathConn
-local function applyAntiDeathCounter()
-    if antiDeathConn then antiDeathConn:Disconnect(); antiDeathConn = nil end
+function PlayerFx.antiDeath()
+    if PlayerFx.antiDeathConn then PlayerFx.antiDeathConn:Disconnect(); PlayerFx.antiDeathConn = nil end
     if not Settings.Player.AntiDeathCounter then return end
-    antiDeathConn = RunService.Heartbeat:Connect(function()
-        if not currentCharacter then return end
+    PlayerFx.antiDeathConn = RunService.Heartbeat:Connect(function()
         for _, plr in ipairs(Players:GetPlayers()) do
             if plr ~= player and plr.Character then
                 local counter = plr.Character:FindFirstChild("Counter")
-                if counter then
-                    pcall(function() counter:Destroy() end)
-                end
+                if counter then counter:Destroy() end
             end
         end
     end)
 end
 
--- WalkSpeed: constant heartbeat override (functional as-is)
-RunService.Heartbeat:Connect(function()
-    if Settings.Player.WalkSpeedEnabled and currentHumanoid then
-        if currentHumanoid.WalkSpeed ~= Settings.Player.WalkSpeed then
-            currentHumanoid.WalkSpeed = Settings.Player.WalkSpeed
-        end
+-- 1 = leave the dash alone; otherwise scale by range / 15
+function PlayerFx.dashMultiplier(vel)
+    if not currentRootPart then return 1 end
+    local flatVel = Vector3.new(vel.X, 0, vel.Z)
+    if flatVel.Magnitude < 1 then return 1 end
+    local cf = currentRootPart.CFrame
+    local look = Vector3.new(cf.LookVector.X, 0, cf.LookVector.Z)
+    local right = Vector3.new(cf.RightVector.X, 0, cf.RightVector.Z)
+    if look.Magnitude < 0.001 or right.Magnitude < 0.001 then return 1 end
+    local u = flatVel.Unit
+    local f, r = u:Dot(look.Unit), u:Dot(right.Unit)
+    if f < -0.5 then
+        if Settings.Player.BackDashEnabled then return Settings.Player.BackDashRange / 15 end
+    elseif math.abs(r) > 0.5 then
+        if Settings.Player.SideDashEnabled then return Settings.Player.SideDashRange / 15 end
     end
-end)
+    return 1
+end
 
--- FIX 5: Side/Back Dash — single one-shot velocity multiply missed the window.
--- Now applies velocity continuously for 0.2s after the dash fires, covering the full dash travel.
-UIS.InputBegan:Connect(function(input, gp)
-    if gp then return end
-    if input.KeyCode ~= Enum.KeyCode.Q then return end
-    if not currentRootPart then return end
+-- works on any device: scales the game's own dash velocity object when it appears on the root part
+function PlayerFx.hookDash(root)
+    if PlayerFx.dashConn then PlayerFx.dashConn:Disconnect(); PlayerFx.dashConn = nil end
+    if not root then return end
+    PlayerFx.dashConn = root.ChildAdded:Connect(function(obj)
+        if not (obj:IsA("BodyVelocity") or obj:IsA("LinearVelocity")) then return end
+        task.spawn(function()
+            task.wait() -- let the game set the velocity first
+            if not obj.Parent then return end
+            local isBV = obj:IsA("BodyVelocity")
+            local vel = isBV and obj.Velocity or obj.VectorVelocity
+            local mult = PlayerFx.dashMultiplier(vel)
+            if mult ~= 1 then
+                PlayerFx.lastDash = tick()
+                local scaled = Vector3.new(vel.X * mult, vel.Y, vel.Z * mult)
+                if isBV then obj.Velocity = scaled else obj.VectorVelocity = scaled end
+            end
+        end)
+    end)
+end
 
-    local isSide = UIS:IsKeyDown(Enum.KeyCode.A) or UIS:IsKeyDown(Enum.KeyCode.D)
-    local isBack = UIS:IsKeyDown(Enum.KeyCode.S)
-
-    local shouldExtend = (isSide and Settings.Player.SideDashEnabled)
-                      or (isBack and Settings.Player.BackDashEnabled)
-    if not shouldExtend then return end
-
-    local range      = (isSide and Settings.Player.SideDashEnabled)
-                       and Settings.Player.SideDashRange
-                        or Settings.Player.BackDashRange
-    local multiplier = range / 15
-
-    task.spawn(function()
-        task.wait(0.05)               -- wait for server to initiate the dash velocity
-        local endTime = tick() + 0.2  -- apply for the full dash travel window
-        while tick() < endTime and currentRootPart do
-            pcall(function()
-                local vel = currentRootPart.AssemblyLinearVelocity
-                if vel.Magnitude > 3 then
-                    currentRootPart.AssemblyLinearVelocity = Vector3.new(
-                        vel.X * multiplier, vel.Y, vel.Z * multiplier
-                    )
-                end
-            end)
-            task.wait()  -- next heartbeat
+function PlayerFx.init()
+    -- constant WalkSpeed override
+    RunService.Heartbeat:Connect(function()
+        local hum = currentHumanoid
+        if Settings.Player.WalkSpeedEnabled and hum and hum.WalkSpeed ~= Settings.Player.WalkSpeed then
+            hum.WalkSpeed = Settings.Player.WalkSpeed
         end
     end)
-end)
+    -- keep the head hidden even if the game resets it (runs last in the frame)
+    RunService:BindToRenderStep("VelaHeadless", Enum.RenderPriority.Last.Value, function()
+        if not Settings.Player.Headless or not currentCharacter then return end
+        local head = currentCharacter:FindFirstChild("Head")
+        if not head then return end
+        if head.Transparency ~= 1 then head.Transparency = 1 end
+        local face = head:FindFirstChild("face")
+        if face and face.Transparency ~= 1 then face.Transparency = 1 end
+    end)
+    -- PC fallback: if the dash had no velocity object, scale the root velocity instead
+    UIS.InputBegan:Connect(function(input, gp)
+        if gp or input.KeyCode ~= Enum.KeyCode.Q then return end
+        local side = UIS:IsKeyDown(Enum.KeyCode.A) or UIS:IsKeyDown(Enum.KeyCode.D)
+        local back = UIS:IsKeyDown(Enum.KeyCode.S)
+        local mult = 1
+        if side and Settings.Player.SideDashEnabled then mult = Settings.Player.SideDashRange / 15
+        elseif back and Settings.Player.BackDashEnabled then mult = Settings.Player.BackDashRange / 15 end
+        if mult == 1 then return end
+        local pressed = tick()
+        task.delay(0.15, function()
+            if PlayerFx.lastDash >= pressed then return end -- already scaled via the dash object
+            if currentRootPart then
+                local vel = currentRootPart.AssemblyLinearVelocity
+                currentRootPart.AssemblyLinearVelocity = Vector3.new(vel.X * mult, vel.Y, vel.Z * mult)
+            end
+        end)
+    end)
+end
+safe("player features", PlayerFx.init)
 
--- ===== Device Detection =====
+-- ===== Device / Executor detection =====
 local function detectDevice()
     local ok, ten = pcall(function() return game:GetService("GuiService"):IsTenFootInterface() end)
     if ok and ten then return "Console", false end
-    local cam   = workspace.CurrentCamera
-    local small = cam and cam.ViewportSize.X < 900 and UIS.TouchEnabled
-    if (UIS.TouchEnabled and not UIS.KeyboardEnabled) or small then return "Mobile", true end
+    -- the platform is the reliable signal (touch screens on PC laptops report TouchEnabled too)
+    local okp, platform = pcall(function() return UIS:GetPlatform() end)
+    if okp and platform then
+        if platform == Enum.Platform.IOS or platform == Enum.Platform.Android then return "Mobile", true end
+        if platform == Enum.Platform.Windows or platform == Enum.Platform.OSX or platform == Enum.Platform.Linux or platform == Enum.Platform.UWP then return "PC", false end
+    end
+    if UIS.TouchEnabled and not UIS.KeyboardEnabled then return "Mobile", true end
     return "PC", false
 end
 
 local DEVICE
 DEVICE, isMobile = detectDevice()
-local INFO_TEXT = DEVICE .. "  |  RightShift = hide/show"
+local INFO_TEXT
+do
+    local name, ver
+    if identifyexecutor then
+        local ok, n, v = pcall(identifyexecutor)
+        if ok and n then name, ver = tostring(n), v and tostring(v) end
+    end
+    if not name and getexecutorname then
+        local ok, n = pcall(getexecutorname)
+        if ok and n then name = tostring(n) end
+    end
+    INFO_TEXT = DEVICE .. "  |  " .. (name or "Unknown executor") .. (ver and (" " .. ver) or "")
+    if not isMobile then INFO_TEXT = INFO_TEXT .. "  |  RightShift = hide/show" end
+end
 
 -- ===== UI Setup =====
 local QUINT = Enum.EasingStyle.Quint
@@ -582,8 +668,8 @@ local function tween(obj, time, props, style, dir) local t = TweenService:Create
 local function corner(inst, r) local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, r); c.Parent = inst; return c end
 local function seq(...) local pts = {}; for _, p in ipairs({...}) do table.insert(pts, NumberSequenceKeypoint.new(p[1], p[2])) end; return NumberSequence.new(pts) end
 local function glassStroke(parent, thickness, baseTransparency)
-    local s = Instance.new("UIStroke"); s.Color = Color3.new(1,1,1); s.Thickness = thickness; s.Transparency = baseTransparency; s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; s.Parent = parent
-    local g = Instance.new("UIGradient"); g.Rotation = 45; g.Transparency = seq({0,0.1},{0.5,0.7},{1,0.25}); g.Parent = s
+    local s = Instance.new("UIStroke"); s.Color = Color3.new(1, 1, 1); s.Thickness = thickness; s.Transparency = baseTransparency; s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; s.Parent = parent
+    local g = Instance.new("UIGradient"); g.Rotation = 45; g.Transparency = seq({ 0, 0.1 }, { 0.5, 0.7 }, { 1, 0.25 }); g.Parent = s
     return s
 end
 local orderCounters = setmetatable({}, { __mode = "k" })
@@ -594,203 +680,152 @@ local function getGuiParent()
         local ok, hui = pcall(gethui)
         if ok and hui then return hui end
     end
+    local ok2, cg = pcall(function() return game:GetService("CoreGui") end)
+    if ok2 and cg then
+        -- CoreGui can reject parenting from a normal script; test it
+        local okTest = pcall(function() local f = Instance.new("Folder"); f.Parent = cg; f:Destroy() end)
+        if okTest then return cg end
+    end
     return player:WaitForChild("PlayerGui")
 end
 
-local gui    = Instance.new("ScreenGui");    gui.Name = "VelaUI"; gui.ResetOnSpawn = false; gui.IgnoreGuiInset = true; gui.Parent = getGuiParent()
-local blur   = Instance.new("BlurEffect");   blur.Name = "VelaBlur"; blur.Size = 0; blur.Parent = Lighting; local blurOn = true
-local root   = Instance.new("Frame");        root.Name = "Root"; root.Size = UDim2.fromOffset(WIN_W, WIN_H); root.Position = UDim2.new(0.5, -WIN_W/2, 0.5, -WIN_H/2); root.BackgroundTransparency = 1; root.Parent = gui
+local gui = Instance.new("ScreenGui"); gui.Name = "VelaUI"; gui.ResetOnSpawn = false; gui.IgnoreGuiInset = true; gui.Parent = getGuiParent()
+local blur = Instance.new("BlurEffect"); blur.Name = "VelaBlur"; blur.Size = 0; blur.Parent = Lighting; local blurOn = true
+local root = Instance.new("Frame"); root.Name = "Root"; root.Size = UDim2.fromOffset(WIN_W, WIN_H); root.Position = UDim2.new(0.5, -WIN_W / 2, 0.5, -WIN_H / 2); root.BackgroundTransparency = 1; root.Parent = gui
 
-local window = Instance.new("CanvasGroup"); window.Name = "Window"; window.AnchorPoint = Vector2.new(0.5,0); window.Position = UDim2.new(0.5,0,0,0); window.Size = UDim2.fromOffset(WIN_W,WIN_H); window.BackgroundColor3 = Color3.fromRGB(12,12,16); window.BackgroundTransparency = 0.45; window.BorderSizePixel = 0; window.GroupTransparency = 1; window.ClipsDescendants = true; window.Parent = root; corner(window, 24)
+local window = Instance.new("CanvasGroup"); window.Name = "Window"; window.AnchorPoint = Vector2.new(0.5, 0); window.Position = UDim2.new(0.5, 0, 0, 0); window.Size = UDim2.fromOffset(WIN_W, WIN_H); window.BackgroundColor3 = Color3.fromRGB(12, 12, 16); window.BackgroundTransparency = 0.45; window.BorderSizePixel = 0; window.GroupTransparency = 1; window.ClipsDescendants = true; window.Parent = root; corner(window, 24)
 local winScale = Instance.new("UIScale"); winScale.Scale = 0.92; winScale.Parent = window
 
-local bg      = Instance.new("ImageLabel"); bg.Name = "Background"; bg.Size = UDim2.fromOffset(WIN_W,WIN_H); bg.BackgroundTransparency = 1; bg.Image = BG_IMAGE; bg.ImageTransparency = 0.3; bg.ScaleType = Enum.ScaleType.Crop; bg.ZIndex = 1; bg.Parent = window; corner(bg, 24)
-local overlay = Instance.new("Frame");      overlay.Name = "BackgroundOverlay"; overlay.Size = UDim2.fromScale(1,1); overlay.BackgroundColor3 = Color3.new(0,0,0); overlay.BackgroundTransparency = 0.7; overlay.BorderSizePixel = 0; overlay.ZIndex = 2; overlay.Parent = window; corner(overlay, 24)
-local glass   = Instance.new("Frame");      glass.Name = "Glass"; glass.Size = UDim2.fromScale(1,1); glass.BackgroundColor3 = Color3.new(1,1,1); glass.BackgroundTransparency = 0.85; glass.BorderSizePixel = 0; glass.ZIndex = 3; glass.Parent = window; corner(glass, 24); local g = Instance.new("UIGradient"); g.Rotation = 35; g.Transparency = seq({0,0},{0.55,0.7},{1,0.2}); g.Parent = glass
-local sheen   = Instance.new("Frame");      sheen.Name = "Sheen"; sheen.Size = UDim2.new(1,0,0,90); sheen.BackgroundColor3 = Color3.new(1,1,1); sheen.BackgroundTransparency = 0.88; sheen.BorderSizePixel = 0; sheen.ZIndex = 4; sheen.Parent = window; corner(sheen, 24); local sg = Instance.new("UIGradient"); sg.Rotation = 90; sg.Transparency = seq({0,0},{1,1}); sg.Parent = sheen
-local rim     = Instance.new("Frame");      rim.Name = "Rim"; rim.Size = UDim2.new(1,-2,1,-2); rim.Position = UDim2.fromOffset(1,1); rim.BackgroundTransparency = 1; rim.ZIndex = 30; rim.Parent = window; corner(rim, 23); glassStroke(rim, 1, 0.35)
+local bg = Instance.new("ImageLabel"); bg.Name = "Background"; bg.Size = UDim2.fromOffset(WIN_W, WIN_H); bg.BackgroundTransparency = 1; bg.Image = BG_IMAGE; bg.ImageTransparency = 0.3; bg.ScaleType = Enum.ScaleType.Crop; bg.ZIndex = 1; bg.Parent = window; corner(bg, 24)
+local overlay = Instance.new("Frame"); overlay.Name = "BackgroundOverlay"; overlay.Size = UDim2.fromScale(1, 1); overlay.BackgroundColor3 = Color3.new(0, 0, 0); overlay.BackgroundTransparency = 0.7; overlay.BorderSizePixel = 0; overlay.ZIndex = 2; overlay.Parent = window; corner(overlay, 24)
+local glass = Instance.new("Frame"); glass.Name = "Glass"; glass.Size = UDim2.fromScale(1, 1); glass.BackgroundColor3 = Color3.new(1, 1, 1); glass.BackgroundTransparency = 0.85; glass.BorderSizePixel = 0; glass.ZIndex = 3; glass.Parent = window; corner(glass, 24); local g = Instance.new("UIGradient"); g.Rotation = 35; g.Transparency = seq({ 0, 0 }, { 0.55, 0.7 }, { 1, 0.2 }); g.Parent = glass
+local sheen = Instance.new("Frame"); sheen.Name = "Sheen"; sheen.Size = UDim2.new(1, 0, 0, 90); sheen.BackgroundColor3 = Color3.new(1, 1, 1); sheen.BackgroundTransparency = 0.88; sheen.BorderSizePixel = 0; sheen.ZIndex = 4; sheen.Parent = window; corner(sheen, 24); local sg = Instance.new("UIGradient"); sg.Rotation = 90; sg.Transparency = seq({ 0, 0 }, { 1, 1 }); sg.Parent = sheen
+local rim = Instance.new("Frame"); rim.Name = "Rim"; rim.Size = UDim2.new(1, -2, 1, -2); rim.Position = UDim2.fromOffset(1, 1); rim.BackgroundTransparency = 1; rim.ZIndex = 30; rim.Parent = window; corner(rim, 23); glassStroke(rim, 1, 0.35)
 
-local titleBar = Instance.new("Frame"); titleBar.Name = "TitleBar"; titleBar.Size = UDim2.new(1,0,0,BAR_H); titleBar.BackgroundTransparency = 1; titleBar.ZIndex = 6; titleBar.Parent = window
-local dots = {}
+local titleBar = Instance.new("Frame"); titleBar.Name = "TitleBar"; titleBar.Size = UDim2.new(1, 0, 0, BAR_H); titleBar.BackgroundTransparency = 1; titleBar.ZIndex = 6; titleBar.Parent = window
 local function makeDot(x, color, glyph)
-    local dot = Instance.new("TextButton"); dot.Size = UDim2.fromOffset(12,12); dot.Position = UDim2.new(0,x,0.5,-6); dot.BackgroundColor3 = color; dot.Text = glyph; dot.TextColor3 = Color3.fromRGB(60,20,20); dot.TextTransparency = 1; dot.TextSize = 10; dot.Font = FONT_BOLD; dot.AutoButtonColor = false; dot.ZIndex = 7; dot.Parent = titleBar; corner(dot,6); glassStroke(dot,1,0.6)
-    table.insert(dots, dot); return dot
+    local dot = Instance.new("TextButton"); dot.Size = UDim2.fromOffset(12, 12); dot.Position = UDim2.new(0, x, 0.5, -6); dot.BackgroundColor3 = color; dot.Text = glyph; dot.TextColor3 = Color3.fromRGB(60, 20, 20); dot.TextTransparency = 1; dot.TextSize = 10; dot.Font = FONT_BOLD; dot.AutoButtonColor = false; dot.ZIndex = 7; dot.Parent = titleBar; corner(dot, 6); glassStroke(dot, 1, 0.6)
+    return dot
 end
-local closeDot = makeDot(14, Color3.fromRGB(255,95,86),  "x")
-local minDot   = makeDot(32, Color3.fromRGB(255,189,46), "-")
-local maxDot   = makeDot(50, Color3.fromRGB(39,201,63),  "+")
-local titleLabel = Instance.new("TextLabel"); titleLabel.Size = UDim2.new(1,-140,0,15); titleLabel.Position = UDim2.new(0,76,0,3); titleLabel.TextTruncate = Enum.TextTruncate.AtEnd; titleLabel.BackgroundTransparency = 1; titleLabel.Text = TITLE.."  |  "..SUBTITLE; titleLabel.TextColor3 = Color3.fromRGB(235,235,242); titleLabel.Font = FONT; titleLabel.TextSize = 12; titleLabel.TextXAlignment = Enum.TextXAlignment.Left; titleLabel.ZIndex = 6; titleLabel.Parent = titleBar
-local infoLabel  = Instance.new("TextLabel"); infoLabel.Name = "DeviceInfo"; infoLabel.Size = UDim2.new(1,-140,0,12); infoLabel.Position = UDim2.new(0,76,0,17); infoLabel.BackgroundTransparency = 1; infoLabel.Text = INFO_TEXT; infoLabel.TextColor3 = Color3.fromRGB(165,165,178); infoLabel.Font = FONT; infoLabel.TextSize = 9; infoLabel.TextXAlignment = Enum.TextXAlignment.Left; infoLabel.TextTruncate = Enum.TextTruncate.AtEnd; infoLabel.ZIndex = 6; infoLabel.Parent = titleBar
-local versionLabel = Instance.new("TextLabel"); versionLabel.Name = "Version"; versionLabel.Size = UDim2.fromOffset(120,14); versionLabel.Position = UDim2.new(0,14,1,-22); versionLabel.BackgroundTransparency = 1; versionLabel.Text = VERSION; versionLabel.TextColor3 = Color3.fromRGB(165,165,178); versionLabel.TextTransparency = 0.2; versionLabel.Font = FONT; versionLabel.TextSize = 10; versionLabel.TextXAlignment = Enum.TextXAlignment.Left; versionLabel.ZIndex = 8; versionLabel.Parent = window
+local closeDot = makeDot(14, Color3.fromRGB(255, 95, 86), "x")
+local minDot = makeDot(32, Color3.fromRGB(255, 189, 46), "-")
+local maxDot = makeDot(50, Color3.fromRGB(39, 201, 63), "+")
+local titleLabel = Instance.new("TextLabel"); titleLabel.Size = UDim2.new(1, -140, 0, 15); titleLabel.Position = UDim2.new(0, 76, 0, 3); titleLabel.TextTruncate = Enum.TextTruncate.AtEnd; titleLabel.BackgroundTransparency = 1; titleLabel.Text = TITLE .. "  |  " .. SUBTITLE; titleLabel.TextColor3 = Color3.fromRGB(235, 235, 242); titleLabel.Font = FONT; titleLabel.TextSize = 12; titleLabel.TextXAlignment = Enum.TextXAlignment.Left; titleLabel.ZIndex = 6; titleLabel.Parent = titleBar
+local infoLabel = Instance.new("TextLabel"); infoLabel.Name = "DeviceInfo"; infoLabel.Size = UDim2.new(1, -140, 0, 12); infoLabel.Position = UDim2.new(0, 76, 0, 17); infoLabel.BackgroundTransparency = 1; infoLabel.Text = INFO_TEXT; infoLabel.TextColor3 = Color3.fromRGB(165, 165, 178); infoLabel.Font = FONT; infoLabel.TextSize = 9; infoLabel.TextXAlignment = Enum.TextXAlignment.Left; infoLabel.TextTruncate = Enum.TextTruncate.AtEnd; infoLabel.ZIndex = 6; infoLabel.Parent = titleBar
+local versionLabel = Instance.new("TextLabel"); versionLabel.Name = "Version"; versionLabel.Size = UDim2.new(0, 120, 0, 14); versionLabel.Position = UDim2.new(0, 14, 1, -22); versionLabel.BackgroundTransparency = 1; versionLabel.Text = VERSION; versionLabel.TextColor3 = Color3.fromRGB(165, 165, 178); versionLabel.TextTransparency = 0.2; versionLabel.Font = FONT; versionLabel.TextSize = 10; versionLabel.TextXAlignment = Enum.TextXAlignment.Left; versionLabel.ZIndex = 8; versionLabel.Parent = window
 
-local pos    = { x = -WIN_W/2, y = -WIN_H/2 }
-local target = { x = pos.x,    y = pos.y     }
+local pos = { x = -WIN_W / 2, y = -WIN_H / 2 }; local target = { x = pos.x, y = pos.y }
 local dragging = false; local dragStart, startTarget
-titleBar.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true; dragStart = input.Position; startTarget = {x=target.x,y=target.y}; tween(winScale,0.25,{Scale=1.015})
-    end
-end)
-UIS.InputChanged:Connect(function(input)
-    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-        local delta = input.Position - dragStart; local vp = gui.AbsoluteSize
-        target.x = math.clamp(startTarget.x + delta.X, -vp.X/2, vp.X/2 - WIN_W)
-        target.y = math.clamp(startTarget.y + delta.Y, -vp.Y/2, vp.Y/2 - BAR_H)
-    end
-end)
-UIS.InputEnded:Connect(function(input)
-    if dragging and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
-        dragging = false; tween(winScale, 0.4, {Scale=1}, Enum.EasingStyle.Back)
-    end
-end)
-RunService.RenderStepped:Connect(function(dt)
-    local a = 1 - math.exp(-dt * 22); local dx, dy = target.x - pos.x, target.y - pos.y
-    if math.abs(dx) > 0.05 or math.abs(dy) > 0.05 then
-        pos.x += dx * a; pos.y += dy * a
-        root.Position = UDim2.new(0.5, pos.x, 0.5, pos.y)
-    end
-end)
+titleBar.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = true; dragStart = input.Position; startTarget = { x = target.x, y = target.y }; tween(winScale, 0.25, { Scale = 1.015 }) end end)
+UIS.InputChanged:Connect(function(input) if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then local delta = input.Position - dragStart; local vp = gui.AbsoluteSize; target.x = math.clamp(startTarget.x + delta.X, -vp.X / 2, vp.X / 2 - WIN_W); target.y = math.clamp(startTarget.y + delta.Y, -vp.Y / 2, vp.Y / 2 - BAR_H) end end)
+UIS.InputEnded:Connect(function(input) if dragging and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then dragging = false; tween(winScale, 0.4, { Scale = 1 }, Enum.EasingStyle.Back) end end)
+RunService.RenderStepped:Connect(function(dt) local a = 1 - math.exp(-dt * 22); local dx, dy = target.x - pos.x, target.y - pos.y; if math.abs(dx) > 0.05 or math.abs(dy) > 0.05 then pos.x += dx * a; pos.y += dy * a; root.Position = UDim2.new(0.5, pos.x, 0.5, pos.y) end end)
 
 local SIDE_W, TAB_H, TAB_GAP = 100, 28, 6
-local sidebar = Instance.new("Frame"); sidebar.Name = "Sidebar"; sidebar.Size = UDim2.fromOffset(SIDE_W, WIN_H-BAR_H-8); sidebar.Position = UDim2.fromOffset(8, BAR_H+2); sidebar.BackgroundTransparency = 1; sidebar.ZIndex = 5; sidebar.Parent = window
-local pill = Instance.new("Frame"); pill.Name = "Pill"; pill.Size = UDim2.new(1,0,0,TAB_H); pill.BackgroundColor3 = Color3.new(1,1,1); pill.BackgroundTransparency = 0.82; pill.BorderSizePixel = 0; pill.Visible = false; pill.ZIndex = 5; pill.Parent = sidebar; corner(pill,14); glassStroke(pill,1,0.55); local pg = Instance.new("UIGradient"); pg.Rotation = 90; pg.Transparency = seq({0,0},{1,0.5}); pg.Parent = pill
-local tabList = Instance.new("Frame"); tabList.Name = "Tabs"; tabList.Size = UDim2.fromScale(1,1); tabList.BackgroundTransparency = 1; tabList.ZIndex = 6; tabList.Parent = sidebar
-local tabLayout = Instance.new("UIListLayout"); tabLayout.Padding = UDim.new(0,TAB_GAP); tabLayout.SortOrder = Enum.SortOrder.LayoutOrder; tabLayout.Parent = tabList
-local pagesHolder = Instance.new("Frame"); pagesHolder.Name = "Pages"; pagesHolder.Size = UDim2.fromOffset(WIN_W-SIDE_W-24, WIN_H-BAR_H-8); pagesHolder.Position = UDim2.fromOffset(SIDE_W+16, BAR_H+2); pagesHolder.BackgroundTransparency = 1; pagesHolder.ZIndex = 5; pagesHolder.Parent = window
+local sidebar = Instance.new("Frame"); sidebar.Name = "Sidebar"; sidebar.Size = UDim2.fromOffset(SIDE_W, WIN_H - BAR_H - 8); sidebar.Position = UDim2.fromOffset(8, BAR_H + 2); sidebar.BackgroundTransparency = 1; sidebar.ZIndex = 5; sidebar.Parent = window
+local pill = Instance.new("Frame"); pill.Name = "Pill"; pill.Size = UDim2.new(1, 0, 0, TAB_H); pill.BackgroundColor3 = Color3.new(1, 1, 1); pill.BackgroundTransparency = 0.82; pill.BorderSizePixel = 0; pill.Visible = false; pill.ZIndex = 5; pill.Parent = sidebar; corner(pill, 14); glassStroke(pill, 1, 0.55); local pg = Instance.new("UIGradient"); pg.Rotation = 90; pg.Transparency = seq({ 0, 0 }, { 1, 0.5 }); pg.Parent = pill
+local tabList = Instance.new("Frame"); tabList.Name = "Tabs"; tabList.Size = UDim2.fromScale(1, 1); tabList.BackgroundTransparency = 1; tabList.ZIndex = 6; tabList.Parent = sidebar
+local tabLayout = Instance.new("UIListLayout"); tabLayout.Padding = UDim.new(0, TAB_GAP); tabLayout.SortOrder = Enum.SortOrder.LayoutOrder; tabLayout.Parent = tabList
+local pagesHolder = Instance.new("Frame"); pagesHolder.Name = "Pages"; pagesHolder.Size = UDim2.fromOffset(WIN_W - SIDE_W - 24, WIN_H - BAR_H - 8); pagesHolder.Position = UDim2.fromOffset(SIDE_W + 16, BAR_H + 2); pagesHolder.BackgroundTransparency = 1; pagesHolder.ZIndex = 5; pagesHolder.Parent = window
 local pages, scrolls, tabButtons, tabIndex = {}, {}, {}, {}
 local tabCount = 0; local current
 
 local function createPage(name)
-    local group = Instance.new("CanvasGroup"); group.Name = name; group.Size = UDim2.fromScale(1,1); group.BackgroundTransparency = 1; group.GroupTransparency = 1; group.Visible = false; group.ZIndex = 5; group.Parent = pagesHolder
-    local scroll = Instance.new("ScrollingFrame"); scroll.Size = UDim2.fromScale(1,1); scroll.BackgroundTransparency = 1; scroll.BorderSizePixel = 0; scroll.ScrollBarThickness = 2; scroll.ScrollBarImageColor3 = ACCENT; scroll.ScrollBarImageTransparency = 0.3; scroll.CanvasSize = UDim2.new(); scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y; scroll.ZIndex = 5; scroll.Parent = group
-    local layout = Instance.new("UIListLayout"); layout.Padding = UDim.new(0,6); layout.SortOrder = Enum.SortOrder.LayoutOrder; layout.Parent = scroll
-    local pad = Instance.new("UIPadding"); pad.PaddingTop = UDim.new(0,2); pad.PaddingBottom = UDim.new(0,4); pad.PaddingLeft = UDim.new(0,2); pad.PaddingRight = UDim.new(0,4); pad.Parent = scroll
+    local group = Instance.new("CanvasGroup"); group.Name = name; group.Size = UDim2.fromScale(1, 1); group.BackgroundTransparency = 1; group.GroupTransparency = 1; group.Visible = false; group.ZIndex = 5; group.Parent = pagesHolder
+    local scroll = Instance.new("ScrollingFrame"); scroll.Size = UDim2.fromScale(1, 1); scroll.BackgroundTransparency = 1; scroll.BorderSizePixel = 0; scroll.ScrollBarThickness = 2; scroll.ScrollBarImageColor3 = ACCENT; scroll.ScrollBarImageTransparency = 0.3; scroll.CanvasSize = UDim2.new(); scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y; scroll.ZIndex = 5; scroll.Parent = group
+    local layout = Instance.new("UIListLayout"); layout.Padding = UDim.new(0, 6); layout.SortOrder = Enum.SortOrder.LayoutOrder; layout.Parent = scroll
+    local pad = Instance.new("UIPadding"); pad.PaddingTop = UDim.new(0, 2); pad.PaddingBottom = UDim.new(0, 4); pad.PaddingLeft = UDim.new(0, 2); pad.PaddingRight = UDim.new(0, 4); pad.Parent = scroll
     pages[name] = group; scrolls[name] = scroll; return scroll
 end
 
 local function selectTab(name, instant)
     if current == name then return end
     local old = current; current = name
-    if old then
-        local oldPage = pages[old]
-        tween(oldPage, 0.18, {GroupTransparency=1}, Enum.EasingStyle.Quad, IN).Completed:Connect(function()
-            if current ~= old then oldPage.Visible = false end
-        end)
-    end
-    local page = pages[name]; page.Visible = true; page.Position = UDim2.fromOffset(0, instant and 0 or 12); page.GroupTransparency = instant and 0 or 1
-    tween(page, 0.45, {GroupTransparency=0, Position=UDim2.fromOffset(0,0)})
+    if old then local oldPage = pages[old]; tween(oldPage, 0.18, { GroupTransparency = 1 }, Enum.EasingStyle.Quad, IN).Completed:Connect(function() if current ~= old then oldPage.Visible = false end end) end
+    local page = pages[name]; page.Visible = true; page.Position = UDim2.fromOffset(0, instant and 0 or 12); page.GroupTransparency = instant and 0 or 1; tween(page, 0.45, { GroupTransparency = 0, Position = UDim2.fromOffset(0, 0) })
     local y = (tabIndex[name] - 1) * (TAB_H + TAB_GAP)
-    if instant or not pill.Visible then pill.Position = UDim2.fromOffset(0,y); pill.Visible = true
-    else tween(pill, 0.4, {Position=UDim2.fromOffset(0,y)}, Enum.EasingStyle.Back) end
-    for n, btn in pairs(tabButtons) do
-        tween(btn, 0.25, {TextColor3 = (n==name) and Color3.new(1,1,1) or Color3.fromRGB(175,175,188)})
-    end
+    if instant or not pill.Visible then pill.Position = UDim2.fromOffset(0, y); pill.Visible = true else tween(pill, 0.4, { Position = UDim2.fromOffset(0, y) }, Enum.EasingStyle.Back) end
+    for n, btn in pairs(tabButtons) do tween(btn, 0.25, { TextColor3 = (n == name) and Color3.new(1, 1, 1) or Color3.fromRGB(175, 175, 188) }) end
 end
 
 local function createTab(name)
     tabCount += 1; tabIndex[name] = tabCount
-    local btn = Instance.new("TextButton"); btn.Name = name; btn.Size = UDim2.new(1,0,0,TAB_H); btn.BackgroundTransparency = 1; btn.Text = "   "..name; btn.TextXAlignment = Enum.TextXAlignment.Left; btn.TextColor3 = Color3.fromRGB(175,175,188); btn.Font = FONT; btn.TextSize = 12; btn.AutoButtonColor = false; btn.LayoutOrder = tabCount; btn.ZIndex = 7; btn.Parent = tabList
+    local btn = Instance.new("TextButton"); btn.Name = name; btn.Size = UDim2.new(1, 0, 0, TAB_H); btn.BackgroundTransparency = 1; btn.Text = "   " .. name; btn.TextXAlignment = Enum.TextXAlignment.Left; btn.TextColor3 = Color3.fromRGB(175, 175, 188); btn.Font = FONT; btn.TextSize = 12; btn.AutoButtonColor = false; btn.LayoutOrder = tabCount; btn.ZIndex = 7; btn.Parent = tabList
     tabButtons[name] = btn
-    btn.MouseEnter:Connect(function() if current ~= name then tween(btn,0.2,{TextColor3=Color3.fromRGB(225,225,235)}) end end)
-    btn.MouseLeave:Connect(function() if current ~= name then tween(btn,0.25,{TextColor3=Color3.fromRGB(175,175,188)}) end end)
+    btn.MouseEnter:Connect(function() if current ~= name then tween(btn, 0.2, { TextColor3 = Color3.fromRGB(225, 225, 235) }) end end)
+    btn.MouseLeave:Connect(function() if current ~= name then tween(btn, 0.25, { TextColor3 = Color3.fromRGB(175, 175, 188) }) end end)
     btn.MouseButton1Click:Connect(function() selectTab(name) end)
     return createPage(name)
 end
 
 local function baseRow(parent, height)
-    local row = Instance.new("Frame"); row.Size = UDim2.new(1,0,0,height); row.BackgroundColor3 = Color3.new(1,1,1); row.BackgroundTransparency = 0.88; row.BorderSizePixel = 0; row.LayoutOrder = nextOrder(parent); row.ZIndex = 5; row.Parent = parent; corner(row,14)
-    local g = Instance.new("UIGradient"); g.Rotation = 90; g.Transparency = seq({0,0},{1,0.45}); g.Parent = row
+    local row = Instance.new("Frame"); row.Size = UDim2.new(1, 0, 0, height); row.BackgroundColor3 = Color3.new(1, 1, 1); row.BackgroundTransparency = 0.88; row.BorderSizePixel = 0; row.LayoutOrder = nextOrder(parent); row.ZIndex = 5; row.Parent = parent; corner(row, 14)
+    local g = Instance.new("UIGradient"); g.Rotation = 90; g.Transparency = seq({ 0, 0 }, { 1, 0.45 }); g.Parent = row
     local s = glassStroke(row, 1, 0.65)
-    row.MouseEnter:Connect(function() tween(row,0.25,{BackgroundTransparency=0.8}); tween(s,0.25,{Transparency=0.45}) end)
-    row.MouseLeave:Connect(function() tween(row,0.35,{BackgroundTransparency=0.88}); tween(s,0.35,{Transparency=0.65}) end)
+    row.MouseEnter:Connect(function() tween(row, 0.25, { BackgroundTransparency = 0.8 }); tween(s, 0.25, { Transparency = 0.45 }) end)
+    row.MouseLeave:Connect(function() tween(row, 0.35, { BackgroundTransparency = 0.88 }); tween(s, 0.35, { Transparency = 0.65 }) end)
     return row
 end
 
 local function rowLabels(row, title, desc)
-    local t = Instance.new("TextLabel"); t.Size = UDim2.new(1,-70,0,16); t.Position = UDim2.new(0,10,0,6); t.BackgroundTransparency = 1; t.Text = title; t.TextColor3 = Color3.new(1,1,1); t.Font = FONT; t.TextSize = 12; t.TextXAlignment = Enum.TextXAlignment.Left; t.ZIndex = 6; t.Parent = row
-    if desc and desc ~= "" then
-        local d = Instance.new("TextLabel"); d.Size = UDim2.new(1,-70,0,14); d.Position = UDim2.new(0,10,0,22); d.BackgroundTransparency = 1; d.Text = desc; d.TextColor3 = Color3.fromRGB(165,165,178); d.Font = FONT; d.TextSize = 9; d.TextXAlignment = Enum.TextXAlignment.Left; d.ZIndex = 6; d.Parent = row
-    end
+    local t = Instance.new("TextLabel"); t.Size = UDim2.new(1, -70, 0, 16); t.Position = UDim2.new(0, 10, 0, 6); t.BackgroundTransparency = 1; t.Text = title; t.TextColor3 = Color3.new(1, 1, 1); t.Font = FONT; t.TextSize = 12; t.TextXAlignment = Enum.TextXAlignment.Left; t.ZIndex = 6; t.Parent = row
+    if desc and desc ~= "" then local d = Instance.new("TextLabel"); d.Size = UDim2.new(1, -70, 0, 14); d.Position = UDim2.new(0, 10, 0, 22); d.BackgroundTransparency = 1; d.Text = desc; d.TextColor3 = Color3.fromRGB(165, 165, 178); d.Font = FONT; d.TextSize = 9; d.TextXAlignment = Enum.TextXAlignment.Left; d.ZIndex = 6; d.Parent = row end
 end
 
 local function addSection(page, text)
-    local label = Instance.new("TextLabel"); label.Size = UDim2.new(1,0,0,18); label.BackgroundTransparency = 1; label.Text = string.upper(text); label.TextColor3 = ACCENT; label.Font = FONT_BOLD; label.TextSize = 10; label.TextXAlignment = Enum.TextXAlignment.Left; label.LayoutOrder = nextOrder(page); label.ZIndex = 6; label.Parent = page
+    local label = Instance.new("TextLabel"); label.Size = UDim2.new(1, 0, 0, 18); label.BackgroundTransparency = 1; label.Text = string.upper(text); label.TextColor3 = ACCENT; label.Font = FONT_BOLD; label.TextSize = 10; label.TextXAlignment = Enum.TextXAlignment.Left; label.LayoutOrder = nextOrder(page); label.ZIndex = 6; label.Parent = page
 end
 
 local OFF_COLOR = Color3.fromRGB(90, 90, 104)
 
 local function addToggle(page, title, desc, default, callback)
     local row = baseRow(page, 42); rowLabels(row, title, desc); local state = default and true or false
-    local track = Instance.new("TextButton"); track.Size = UDim2.fromOffset(38,20); track.Position = UDim2.new(1,-48,0.5,-10); track.Text = ""; track.AutoButtonColor = false; track.BackgroundColor3 = state and ACCENT or OFF_COLOR; track.ZIndex = 6; track.Parent = row; corner(track,10); glassStroke(track,1,0.6)
-    local knob = Instance.new("Frame"); knob.Size = UDim2.fromOffset(16,16); knob.BackgroundColor3 = Color3.new(1,1,1); knob.ZIndex = 7; knob.Parent = track; corner(knob,8)
-    local function render(animate, pressed)
-        local w = pressed and 21 or 16
-        local x = state and UDim2.new(1,-(w+2),0.5,-8) or UDim2.new(0,2,0.5,-8)
-        tween(track, animate and 0.25 or 0, {BackgroundColor3 = state and ACCENT or OFF_COLOR})
-        tween(knob,  animate and 0.35 or 0, {Position=x, Size=UDim2.fromOffset(w,16)}, Enum.EasingStyle.Back)
-    end
+    local track = Instance.new("TextButton"); track.Size = UDim2.fromOffset(38, 20); track.Position = UDim2.new(1, -48, 0.5, -10); track.Text = ""; track.AutoButtonColor = false; track.BackgroundColor3 = state and ACCENT or OFF_COLOR; track.ZIndex = 6; track.Parent = row; corner(track, 10); glassStroke(track, 1, 0.6)
+    local knob = Instance.new("Frame"); knob.Size = UDim2.fromOffset(16, 16); knob.BackgroundColor3 = Color3.new(1, 1, 1); knob.ZIndex = 7; knob.Parent = track; corner(knob, 8)
+    local function render(animate, pressed) local w = pressed and 21 or 16; local x = state and UDim2.new(1, -(w + 2), 0.5, -8) or UDim2.new(0, 2, 0.5, -8); local info = animate and 0.35 or 0; tween(track, animate and 0.25 or 0, { BackgroundColor3 = state and ACCENT or OFF_COLOR }); tween(knob, info, { Position = x, Size = UDim2.fromOffset(w, 16) }, Enum.EasingStyle.Back) end
     render(false, false)
-    track.MouseButton1Down:Connect(function() render(true,true) end)
-    track.MouseButton1Up:Connect(function()   render(true,false) end)
-    track.MouseLeave:Connect(function()       render(true,false) end)
-    track.MouseButton1Click:Connect(function()
-        state = not state; render(true,false); if callback then callback(state) end
-    end)
+    track.MouseButton1Down:Connect(function() render(true, true) end); track.MouseButton1Up:Connect(function() render(true, false) end); track.MouseLeave:Connect(function() render(true, false) end)
+    track.MouseButton1Click:Connect(function() state = not state; render(true, false); if callback then callback(state) end end)
 end
 
 local function addTextbox(page, title, desc, default, callback, isNumeric)
     local row = baseRow(page, 42); rowLabels(row, title, desc)
-    local box = Instance.new("TextBox"); box.Size = UDim2.fromOffset(60,22); box.Position = UDim2.new(1,-70,0.5,-11); box.BackgroundColor3 = Color3.new(1,1,1); box.BackgroundTransparency = 0.8; box.Text = tostring(default); box.TextColor3 = Color3.new(1,1,1); box.Font = FONT; box.TextSize = 12; box.ClearTextOnFocus = false; box.ZIndex = 7; box.Parent = row; corner(box,10); glassStroke(box,1,0.6)
-    box.FocusLost:Connect(function()
-        local val = box.Text
-        if isNumeric then val = tonumber(val) or default; box.Text = tostring(val) end
-        if callback then callback(val) end
-    end)
+    local box = Instance.new("TextBox"); box.Size = UDim2.fromOffset(60, 22); box.Position = UDim2.new(1, -70, 0.5, -11); box.BackgroundColor3 = Color3.new(1, 1, 1); box.BackgroundTransparency = 0.8; box.Text = tostring(default); box.TextColor3 = Color3.new(1, 1, 1); box.Font = FONT; box.TextSize = 12; box.ClearTextOnFocus = false; box.ZIndex = 7; box.Parent = row; corner(box, 10); glassStroke(box, 1, 0.6)
+    box.FocusLost:Connect(function() local val = box.Text; if isNumeric then val = tonumber(val) or default; box.Text = tostring(val) end; if callback then callback(val) end end)
 end
 
 local function addDropdown(page, title, desc, options, default, callback)
     local row = baseRow(page, 42); rowLabels(row, title, desc)
-    local btn = Instance.new("TextButton"); btn.Size = UDim2.fromOffset(100,22); btn.Position = UDim2.new(1,-110,0.5,-11); btn.BackgroundColor3 = Color3.new(1,1,1); btn.BackgroundTransparency = 0.8; btn.Text = tostring(default); btn.TextColor3 = Color3.new(1,1,1); btn.Font = FONT; btn.TextSize = 11; btn.AutoButtonColor = false; btn.ZIndex = 7; btn.Parent = row; corner(btn,10); glassStroke(btn,1,0.6)
+    local btn = Instance.new("TextButton"); btn.Size = UDim2.fromOffset(100, 22); btn.Position = UDim2.new(1, -110, 0.5, -11); btn.BackgroundColor3 = Color3.new(1, 1, 1); btn.BackgroundTransparency = 0.8; btn.Text = tostring(default); btn.TextColor3 = Color3.new(1, 1, 1); btn.Font = FONT; btn.TextSize = 11; btn.AutoButtonColor = false; btn.ZIndex = 7; btn.Parent = row; corner(btn, 10); glassStroke(btn, 1, 0.6)
     local selected = default
-    btn.MouseButton1Click:Connect(function()
-        local idx = table.find(options, selected) or 1; idx = idx % #options + 1
-        selected = options[idx]; btn.Text = selected; if callback then callback(selected) end
-    end)
+    btn.MouseButton1Click:Connect(function() local idx = table.find(options, selected) or 1; idx = idx % #options + 1; selected = options[idx]; btn.Text = selected; if callback then callback(selected) end end)
 end
 
 local function addButton(page, title, desc, callback)
     local row = baseRow(page, 42); rowLabels(row, title, desc)
-    local btn = Instance.new("TextButton"); btn.Size = UDim2.fromOffset(80,22); btn.Position = UDim2.new(1,-90,0.5,-11); btn.BackgroundColor3 = ACCENT; btn.BackgroundTransparency = 0.2; btn.Text = "Open"; btn.TextColor3 = Color3.new(1,1,1); btn.Font = FONT_BOLD; btn.TextSize = 12; btn.AutoButtonColor = false; btn.ZIndex = 7; btn.Parent = row; corner(btn,10); glassStroke(btn,1,0.4); btn.MouseButton1Click:Connect(callback)
+    local btn = Instance.new("TextButton"); btn.Size = UDim2.fromOffset(80, 22); btn.Position = UDim2.new(1, -90, 0.5, -11); btn.BackgroundColor3 = ACCENT; btn.BackgroundTransparency = 0.2; btn.Text = "Open"; btn.TextColor3 = Color3.new(1, 1, 1); btn.Font = FONT_BOLD; btn.TextSize = 12; btn.AutoButtonColor = false; btn.ZIndex = 7; btn.Parent = row; corner(btn, 10); glassStroke(btn, 1, 0.4); btn.MouseButton1Click:Connect(callback)
 end
 
 local isOpen = false
 local function setOpen(open)
     isOpen = open
-    if open then
-        root.Visible = true
-        tween(window,  0.5, {GroupTransparency=0})
-        tween(winScale, 0.6, {Scale=1}, Enum.EasingStyle.Back)
-        tween(blur,    0.6, {Size = blurOn and BLUR_SIZE or 0})
-    else
-        tween(window,  0.3, {GroupTransparency=1}, QUINT, IN).Completed:Connect(function()
-            if not isOpen then root.Visible = false end
-        end)
-        tween(winScale, 0.3, {Scale=0.94}, QUINT, IN)
-        tween(blur,    0.3, {Size=0})
-    end
+    if open then root.Visible = true; tween(window, 0.5, { GroupTransparency = 0 }); tween(winScale, 0.6, { Scale = 1 }, Enum.EasingStyle.Back); tween(blur, 0.6, { Size = blurOn and BLUR_SIZE or 0 })
+    else tween(window, 0.3, { GroupTransparency = 1 }, QUINT, IN).Completed:Connect(function() if not isOpen then root.Visible = false end end); tween(winScale, 0.3, { Scale = 0.94 }, QUINT, IN); tween(blur, 0.3, { Size = 0 }) end
 end
 
+-- ===== Backgrounds =====
 local bgConn
 local function resolveImage(img)
-    if img:sub(1,5) == "file:" then
+    if img:sub(1, 5) == "file:" then
         local path = img:sub(6)
         if getcustomasset and isfile and isfile(path) then
-            local ok, id = pcall(getcustomasset, path); if ok then return id end
+            local ok, id = pcall(getcustomasset, path)
+            if ok then return id end
         end
         return nil
-    elseif img:sub(1,4) == "url:" then
-        local url  = img:sub(5)
-        local h    = 0
+    elseif img:sub(1, 4) == "url:" then
+        local url = img:sub(5)
+        local h = 0
         for i = 1, #url do h = (h * 31 + url:byte(i)) % 1000000007 end
         local path = "velaware_bg_" .. h .. ".png"
         if writefile and getcustomasset and isfile then
@@ -799,7 +834,8 @@ local function resolveImage(img)
                 if not ok then return nil end
                 writefile(path, data)
             end
-            local ok, id = pcall(getcustomasset, path); if ok then return id end
+            local ok, id = pcall(getcustomasset, path)
+            if ok then return id end
         end
         return nil
     end
@@ -811,13 +847,14 @@ local function applyBackground(name)
     for _, x in ipairs(BACKGROUNDS) do if x.name == name then b = x end end
     if not b or b.image == "" then return end
     local img = resolveImage(b.image)
-    if not img then warn("[Velaware] couldn't load background '"..name.."'"); return end
+    if not img then warn("[Velaware] couldn't load background '" .. name .. "' (check the image path/link)") return end
     if bgConn then bgConn:Disconnect(); bgConn = nil end
     bg.Image = img
     if b.cols then
-        bg.ImageRectSize   = Vector2.new(b.w, b.h)
+        bg.ImageRectSize = Vector2.new(b.w, b.h)
         bg.ImageRectOffset = Vector2.new(0, 0)
-        local last = -1; local t0 = tick()
+        local last = -1
+        local t0 = tick()
         bgConn = RunService.Heartbeat:Connect(function()
             if not root.Visible then return end
             local i = math.floor((tick() - t0) * b.fps) % b.frames
@@ -827,139 +864,110 @@ local function applyBackground(name)
             end
         end)
     else
-        bg.ImageRectSize   = Vector2.new(0, 0)
+        bg.ImageRectSize = Vector2.new(0, 0)
         bg.ImageRectOffset = Vector2.new(0, 0)
     end
 end
 
+-- ===== Loop V2 popup =====
 local loopPopup
 local function toggleLoopPopup()
     if loopPopup and loopPopup.Parent then loopPopup:Destroy(); loopPopup = nil; return end
-    loopPopup = Instance.new("Frame"); loopPopup.Size = UDim2.fromOffset(WIN_W,WIN_H); loopPopup.Position = UDim2.new(0.5,WIN_W/2+20,0.5,-WIN_H/2); loopPopup.BackgroundTransparency = 1; loopPopup.Parent = gui; loopPopup.ZIndex = 100; loopPopup.ClipsDescendants = true
-    local pWindow = Instance.new("CanvasGroup"); pWindow.Size = UDim2.fromOffset(WIN_W,WIN_H); pWindow.BackgroundColor3 = Color3.fromRGB(40,40,48); pWindow.BackgroundTransparency = 0.1; pWindow.BorderSizePixel = 0; pWindow.Parent = loopPopup; corner(pWindow,24)
-    local pScale = Instance.new("UIScale"); pScale.Scale = 0.92; pScale.Parent = pWindow; tween(pScale,0.6,{Scale=1},Enum.EasingStyle.Back)
-    local pRim = Instance.new("Frame"); pRim.Size = UDim2.new(1,-2,1,-2); pRim.Position = UDim2.fromOffset(1,1); pRim.BackgroundTransparency = 1; pRim.ZIndex = 30; pRim.Parent = pWindow; corner(pRim,23); glassStroke(pRim,1,0.35)
-    local pTitle = Instance.new("Frame"); pTitle.Size = UDim2.new(1,0,0,BAR_H); pTitle.BackgroundTransparency = 1; pTitle.ZIndex = 6; pTitle.Parent = pWindow
-    local pLabel = Instance.new("TextLabel"); pLabel.Size = UDim2.new(1,-140,1,0); pLabel.Position = UDim2.new(0,76,0,0); pLabel.BackgroundTransparency = 1; pLabel.Text = "Velaware  |  Loop V2"; pLabel.TextColor3 = Color3.fromRGB(235,235,242); pLabel.Font = FONT; pLabel.TextSize = 12; pLabel.TextXAlignment = Enum.TextXAlignment.Left; pLabel.ZIndex = 6; pLabel.Parent = pTitle
-    local pClose = Instance.new("TextButton"); pClose.Size = UDim2.fromOffset(12,12); pClose.Position = UDim2.new(0,14,0.5,-6); pClose.BackgroundColor3 = Color3.fromRGB(255,95,86); pClose.Text = "x"; pClose.TextColor3 = Color3.fromRGB(60,20,20); pClose.TextSize = 10; pClose.Font = FONT_BOLD; pClose.AutoButtonColor = false; pClose.ZIndex = 7; pClose.Parent = pTitle; corner(pClose,6); glassStroke(pClose,1,0.6); pClose.MouseButton1Click:Connect(function() loopPopup:Destroy(); loopPopup = nil end)
-    local pScroll = Instance.new("ScrollingFrame"); pScroll.Size = UDim2.new(1,-20,1,-BAR_H-10); pScroll.Position = UDim2.fromOffset(10,BAR_H+5); pScroll.BackgroundTransparency = 1; pScroll.BorderSizePixel = 0; pScroll.ScrollBarThickness = 2; pScroll.ScrollBarImageColor3 = ACCENT; pScroll.ScrollBarImageTransparency = 0.3; pScroll.CanvasSize = UDim2.new(); pScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y; pScroll.ZIndex = 5; pScroll.Parent = pWindow
-    local pLay = Instance.new("UIListLayout"); pLay.Padding = UDim.new(0,6); pLay.SortOrder = Enum.SortOrder.LayoutOrder; pLay.Parent = pScroll
-    local pPad = Instance.new("UIPadding"); pPad.PaddingTop = UDim.new(0,2); pPad.PaddingBottom = UDim.new(0,4); pPad.PaddingLeft = UDim.new(0,2); pPad.PaddingRight = UDim.new(0,4); pPad.Parent = pScroll
+    loopPopup = Instance.new("Frame"); loopPopup.Size = UDim2.fromOffset(WIN_W, WIN_H); loopPopup.Position = UDim2.new(0.5, WIN_W/2 + 20, 0.5, -WIN_H/2); loopPopup.BackgroundTransparency = 1; loopPopup.Parent = gui; loopPopup.ZIndex = 100; loopPopup.ClipsDescendants = true
+    local pWindow = Instance.new("CanvasGroup"); pWindow.Size = UDim2.fromOffset(WIN_W, WIN_H); pWindow.BackgroundColor3 = Color3.fromRGB(40, 40, 48); pWindow.BackgroundTransparency = 0.1; pWindow.BorderSizePixel = 0; pWindow.Parent = loopPopup; corner(pWindow, 24)
+    local pScale = Instance.new("UIScale"); pScale.Scale = 0.92; pScale.Parent = pWindow; tween(pScale, 0.6, { Scale = 1 }, Enum.EasingStyle.Back)
+    local pRim = Instance.new("Frame"); pRim.Size = UDim2.new(1, -2, 1, -2); pRim.Position = UDim2.fromOffset(1, 1); pRim.BackgroundTransparency = 1; pRim.ZIndex = 30; pRim.Parent = pWindow; corner(pRim, 23); glassStroke(pRim, 1, 0.35)
+    local pTitle = Instance.new("Frame"); pTitle.Size = UDim2.new(1, 0, 0, BAR_H); pTitle.BackgroundTransparency = 1; pTitle.ZIndex = 6; pTitle.Parent = pWindow
+    local pLabel = Instance.new("TextLabel"); pLabel.Size = UDim2.new(1, -140, 1, 0); pLabel.Position = UDim2.new(0, 76, 0, 0); pLabel.BackgroundTransparency = 1; pLabel.Text = "Velaware  |  Loop V2"; pLabel.TextColor3 = Color3.fromRGB(235, 235, 242); pLabel.Font = FONT; pLabel.TextSize = 12; pLabel.TextXAlignment = Enum.TextXAlignment.Left; pLabel.ZIndex = 6; pLabel.Parent = pTitle
+    local pClose = Instance.new("TextButton"); pClose.Size = UDim2.fromOffset(12, 12); pClose.Position = UDim2.new(0, 14, 0.5, -6); pClose.BackgroundColor3 = Color3.fromRGB(255, 95, 86); pClose.Text = "x"; pClose.TextColor3 = Color3.fromRGB(60, 20, 20); pClose.TextSize = 10; pClose.Font = FONT_BOLD; pClose.AutoButtonColor = false; pClose.ZIndex = 7; pClose.Parent = pTitle; corner(pClose, 6); glassStroke(pClose, 1, 0.6); pClose.MouseButton1Click:Connect(function() loopPopup:Destroy(); loopPopup = nil end)
+    local pScroll = Instance.new("ScrollingFrame"); pScroll.Size = UDim2.new(1, -20, 1, -BAR_H - 10); pScroll.Position = UDim2.fromOffset(10, BAR_H + 5); pScroll.BackgroundTransparency = 1; pScroll.BorderSizePixel = 0; pScroll.ScrollBarThickness = 2; pScroll.ScrollBarImageColor3 = ACCENT; pScroll.ScrollBarImageTransparency = 0.3; pScroll.CanvasSize = UDim2.new(); pScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y; pScroll.ZIndex = 5; pScroll.Parent = pWindow
+    local pLay = Instance.new("UIListLayout"); pLay.Padding = UDim.new(0, 6); pLay.SortOrder = Enum.SortOrder.LayoutOrder; pLay.Parent = pScroll
+    local pPad = Instance.new("UIPadding"); pPad.PaddingTop = UDim.new(0, 2); pPad.PaddingBottom = UDim.new(0, 4); pPad.PaddingLeft = UDim.new(0, 2); pPad.PaddingRight = UDim.new(0, 4); pPad.Parent = pScroll
 
-    addTextbox(pScroll, "Precision (0-1)",    "", Settings.AutoTech.Loopv2.Precision,       function(v) Settings.AutoTech.Loopv2.Precision       = v end, true)
-    addTextbox(pScroll, "First flick angle",  "", Settings.AutoTech.Loopv2.FirstFlickAngle, function(v) Settings.AutoTech.Loopv2.FirstFlickAngle = v end, true)
-    addTextbox(pScroll, "Second flick delay", "", Settings.AutoTech.Loopv2.SecondFlick,     function(v) Settings.AutoTech.Loopv2.SecondFlick     = v end, true)
-    addToggle(pScroll, "Jump",          "", Settings.AutoTech.Loopv2.Jump,      function(v) Settings.AutoTech.Loopv2.Jump      = v end)
+    addTextbox(pScroll, "Precision (0-1)", "", Settings.AutoTech.Loopv2.Precision, function(v) Settings.AutoTech.Loopv2.Precision = v end, true)
+    addTextbox(pScroll, "First flick angle", "", Settings.AutoTech.Loopv2.FirstFlickAngle, function(v) Settings.AutoTech.Loopv2.FirstFlickAngle = v end, true)
+    addTextbox(pScroll, "Second flick delay", "", Settings.AutoTech.Loopv2.SecondFlick, function(v) Settings.AutoTech.Loopv2.SecondFlick = v end, true)
+    addToggle(pScroll, "Jump", "", Settings.AutoTech.Loopv2.Jump, function(v) Settings.AutoTech.Loopv2.Jump = v end)
     addToggle(pScroll, "Rotate Camera", "", Settings.AutoTech.Loopv2.RotateCam, function(v) Settings.AutoTech.Loopv2.RotateCam = v end)
 
-    local pPos = {x=0,y=-WIN_H/2}; local pTarget = {x=0,y=-WIN_H/2}; local pDrag = false; local pStart, pStartT
-    pTitle.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            pDrag = true; pStart = input.Position; pStartT = {x=pTarget.x,y=pTarget.y}; tween(pScale,0.25,{Scale=1.015})
-        end
-    end)
-    UIS.InputChanged:Connect(function(input)
-        if pDrag and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-            local delta = input.Position - pStart; local vp = gui.AbsoluteSize
-            pTarget.x = math.clamp(pStartT.x+delta.X, -vp.X/2, vp.X/2-WIN_W)
-            pTarget.y = math.clamp(pStartT.y+delta.Y, -vp.Y/2, vp.Y/2-BAR_H)
-        end
-    end)
-    UIS.InputEnded:Connect(function(input)
-        if pDrag and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
-            pDrag = false; tween(pScale,0.4,{Scale=1},Enum.EasingStyle.Back)
-        end
-    end)
-    RunService.RenderStepped:Connect(function(dt)
-        if not loopPopup or not loopPopup.Parent then return end
-        local a = 1 - math.exp(-dt*22); local dx, dy = pTarget.x-pPos.x, pTarget.y-pPos.y
-        if math.abs(dx) > 0.05 or math.abs(dy) > 0.05 then
-            pPos.x += dx*a; pPos.y += dy*a
-            loopPopup.Position = UDim2.new(0.5, pPos.x, 0.5, pPos.y)
-        end
-    end)
+    local pPos = { x = 0, y = -WIN_H/2 }; local pTarget = { x = 0, y = -WIN_H/2 }; local pDrag = false; local pStart, pStartT
+    pTitle.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then pDrag = true; pStart = input.Position; pStartT = { x = pTarget.x, y = pTarget.y }; tween(pScale, 0.25, { Scale = 1.015 }) end end)
+    UIS.InputChanged:Connect(function(input) if pDrag and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then local delta = input.Position - pStart; local vp = gui.AbsoluteSize; pTarget.x = math.clamp(pStartT.x + delta.X, -vp.X / 2, vp.X / 2 - WIN_W); pTarget.y = math.clamp(pStartT.y + delta.Y, -vp.Y / 2, vp.Y / 2 - BAR_H) end end)
+    UIS.InputEnded:Connect(function(input) if pDrag and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then pDrag = false; tween(pScale, 0.4, { Scale = 1 }, Enum.EasingStyle.Back) end end)
+    RunService.RenderStepped:Connect(function(dt) if not loopPopup or not loopPopup.Parent then return end; local a = 1 - math.exp(-dt * 22); local dx, dy = pTarget.x - pPos.x, pTarget.y - pPos.y; if math.abs(dx) > 0.05 or math.abs(dy) > 0.05 then pPos.x += dx * a; pPos.y += dy * a; loopPopup.Position = UDim2.new(0.5, pPos.x, 0.5, pPos.y) end end)
 end
 
--- ===== Tab Content =====
-local main      = createTab("Main")
-local playerTab = createTab("Player")
-local exploit   = createTab("Exploit")
-local setting   = createTab("Setting")
+-- ===== Tabs =====
+local main = createTab("Main"); local playerTab = createTab("Player"); local exploit = createTab("Exploit"); local setting = createTab("Setting")
 
--- Main tab
 addSection(main, "Auto Block")
-addToggle(main, "Enabled",          "Toggle auto block",            Settings.Autoblock.Enabled,      function(on) Settings.Autoblock.Enabled      = on end)
-addTextbox(main,"Auto Block Range", "Radius in studs",              Settings.Autoblock.Range,        function(v)  Settings.Autoblock.Range        = v  end, true)
-addTextbox(main,"Block Hold (s)",   "How long to block",            Settings.Autoblock.BlockHold,    function(v)  Settings.Autoblock.BlockHold    = v  end, true)
-addToggle(main, "Auto Counter",     "Use counter tool",             Settings.Autoblock.AutoCounter,  function(on) Settings.Autoblock.AutoCounter  = on end)
-addToggle(main, "Dash Prediction",  "Predict incoming dashes",      Settings.Autoblock.DashPredict,  function(on) Settings.Autoblock.DashPredict  = on end)
-addToggle(main, "Rotate Character", "Ease character towards enemy", Settings.Autoblock.RotateChar,   function(on) Settings.Autoblock.RotateChar   = on end)
-addToggle(main, "Rotate Camera",    "Ease camera towards enemy",    Settings.Autoblock.RotateCam,    function(on) Settings.Autoblock.RotateCam    = on end)
-addToggle(main, "Debug (console)",  "Prints block/punish events",   Settings.Autoblock.Debug,        function(on) Settings.Autoblock.Debug        = on end)
-addTextbox(main,"Auto Block FOV",   "Angle in degrees",             Settings.Autoblock.FOV,          function(v)  Settings.Autoblock.FOV         = v  end, true)
+addToggle(main, "Enabled", "Toggle auto block", Settings.Autoblock.Enabled, function(on) Settings.Autoblock.Enabled = on end)
+addTextbox(main, "Auto Block Range", "Radius in studs", Settings.Autoblock.Range, function(v) Settings.Autoblock.Range = v end, true)
+addTextbox(main, "Block Hold (s)", "How long to block", Settings.Autoblock.BlockHold, function(v) Settings.Autoblock.BlockHold = v end, true)
+addToggle(main, "Auto Counter", "Use counter tool", Settings.Autoblock.AutoCounter, function(on) Settings.Autoblock.AutoCounter = on end)
+addToggle(main, "Dash Prediction", "Predict incoming dashes", Settings.Autoblock.DashPredict, function(on) Settings.Autoblock.DashPredict = on end)
+addToggle(main, "Rotate Character", "Ease character towards enemy", Settings.Autoblock.RotateChar, function(on) Settings.Autoblock.RotateChar = on end)
+addToggle(main, "Rotate Camera", "Ease camera towards enemy", Settings.Autoblock.RotateCam, function(on) Settings.Autoblock.RotateCam = on end)
+addToggle(main, "Debug (console)", "Prints why block did or didn't fire", Settings.Autoblock.Debug, function(on) Settings.Autoblock.Debug = on end)
+addTextbox(main, "Auto Block FOV", "Angle in degrees", Settings.Autoblock.FOV, function(v) Settings.Autoblock.FOV = v end, true)
 
 addSection(main, "Auto Tech")
-addToggle(main, "Auto Tech",        "Execute tech on 4th M1",       Settings.AutoTech.Enabled,       function(on) Settings.AutoTech.Enabled       = on end)
-addDropdown(main, "Tech Mode", "", {"Supa","Lock On Dash","Loop Dash","Kiba","Loop Dash v2"}, Settings.AutoTech.Tech, function(v) Settings.AutoTech.Tech = v end)
+addToggle(main, "Auto Tech", "Execute tech on 4th M1", Settings.AutoTech.Enabled, function(on) Settings.AutoTech.Enabled = on end)
+addDropdown(main, "Tech Mode", "", {"Supa", "Lock On Dash", "Loop Dash", "Kiba", "Loop Dash v2"}, Settings.AutoTech.Tech, function(v) Settings.AutoTech.Tech = v end)
 addButton(main, "Loop Dash v2 Config", "Open settings popup", toggleLoopPopup)
 
--- Player tab
-addSection(playerTab, "Movement")
-addToggle(playerTab, "WalkSpeed Override", "Enable custom walkspeed", Settings.Player.WalkSpeedEnabled, function(on)
-    Settings.Player.WalkSpeedEnabled = on
-    if currentHumanoid then currentHumanoid.WalkSpeed = on and Settings.Player.WalkSpeed or 16 end
-end)
-addTextbox(playerTab, "WalkSpeed Value", "Default: 16", Settings.Player.WalkSpeed, function(v)
-    Settings.Player.WalkSpeed = v
-    if Settings.Player.WalkSpeedEnabled and currentHumanoid then currentHumanoid.WalkSpeed = v end
-end, true)
-addToggle(playerTab, "Side Dash Override", "Extend side dash range", Settings.Player.SideDashEnabled, function(on)
-    Settings.Player.SideDashEnabled = on
-end)
-addTextbox(playerTab, "Side Dash Range", "Default: 15", Settings.Player.SideDashRange, function(v)
-    Settings.Player.SideDashRange = v
-end, true)
-addToggle(playerTab, "Back Dash Override", "Extend back dash range", Settings.Player.BackDashEnabled, function(on)
-    Settings.Player.BackDashEnabled = on
-end)
-addTextbox(playerTab, "Back Dash Range", "Default: 15", Settings.Player.BackDashRange, function(v)
-    Settings.Player.BackDashRange = v
-end, true)
+-- ===== PLAYER TAB =====
+safe("player tab", function()
+    addSection(playerTab, "Movement")
+    addToggle(playerTab, "WalkSpeed Override", "Enable custom walkspeed", Settings.Player.WalkSpeedEnabled, function(on)
+        if on and currentHumanoid and not Settings.Player.WalkSpeedEnabled then PlayerFx.baseSpeed = currentHumanoid.WalkSpeed end
+        Settings.Player.WalkSpeedEnabled = on
+        if currentHumanoid then currentHumanoid.WalkSpeed = on and Settings.Player.WalkSpeed or (PlayerFx.baseSpeed or 16) end
+    end)
+    addTextbox(playerTab, "WalkSpeed Value", "", Settings.Player.WalkSpeed, function(v)
+        Settings.Player.WalkSpeed = v
+        if Settings.Player.WalkSpeedEnabled and currentHumanoid then currentHumanoid.WalkSpeed = v end
+    end, true)
+    addToggle(playerTab, "Side Dash Override", "Custom side dash range", Settings.Player.SideDashEnabled, function(on) Settings.Player.SideDashEnabled = on end)
+    addTextbox(playerTab, "Side Dash Range", "", Settings.Player.SideDashRange, function(v) Settings.Player.SideDashRange = v end, true)
+    addToggle(playerTab, "Back Dash Override", "Custom back dash range", Settings.Player.BackDashEnabled, function(on) Settings.Player.BackDashEnabled = on end)
+    addTextbox(playerTab, "Back Dash Range", "", Settings.Player.BackDashRange, function(v) Settings.Player.BackDashRange = v end, true)
 
-addSection(playerTab, "Utility")
-addToggle(playerTab, "Anti Death Counter", "Strip Counter attributes from enemies", Settings.Player.AntiDeathCounter, function(on)
-    Settings.Player.AntiDeathCounter = on
-    applyAntiDeathCounter()
-end)
+    addSection(playerTab, "Utility")
+    addToggle(playerTab, "Anti Death Counter", "Remove other players' Counter tag", Settings.Player.AntiDeathCounter, function(on)
+        Settings.Player.AntiDeathCounter = on
+        PlayerFx.antiDeath()
+    end)
 
-addSection(playerTab, "Visuals")
-addToggle(playerTab, "Headless", "Hide head and face", Settings.Player.Headless, function(on)
-    Settings.Player.Headless = on
-    if currentCharacter then applyHeadless(currentCharacter) end
-end)
-addToggle(playerTab, "Korblox", "Apply Korblox right leg", Settings.Player.Korblox, function(on)
-    Settings.Player.Korblox = on
-    if currentCharacter then applyKorblox(currentCharacter) end
+    addSection(playerTab, "Visuals")
+    addToggle(playerTab, "Headless", "Hide head and face", Settings.Player.Headless, function(on)
+        Settings.Player.Headless = on
+        if currentCharacter then PlayerFx.headless(currentCharacter) end
+    end)
+    addToggle(playerTab, "Korblox", "Apply korblox right leg", Settings.Player.Korblox, function(on)
+        Settings.Player.Korblox = on
+        if currentCharacter then PlayerFx.korblox(currentCharacter) end
+    end)
 end)
 
--- Setting tab
-do
+-- ===== SETTING TAB =====
+safe("setting tab", function()
     local names = {}
-    for _, b in ipairs(BACKGROUNDS) do if b.image ~= "" then names[#names+1] = b.name end end
+    for _, b in ipairs(BACKGROUNDS) do if b.image ~= "" then names[#names + 1] = b.name end end
     addSection(setting, "Appearance")
     addDropdown(setting, "Background", "Tap to switch", names, DEFAULT_BG, applyBackground)
     if DEFAULT_BG ~= "Static" then applyBackground(DEFAULT_BG) end
-end
+end)
 
-selectTab("Main", true)
-setOpen(true)
+selectTab("Main", true); setOpen(true)
+print("[Velaware] UI built (" .. DEVICE .. ")")
 
--- Mobile launcher
+-- ===== Mobile launcher (PC has no button: press RightShift instead) =====
 if isMobile then
     local LW, LH = 112, 38
-    local launcher = Instance.new("Frame"); launcher.Name = "Launcher"; launcher.Size = UDim2.fromOffset(LW,LH); launcher.Position = UDim2.fromOffset(20,120); launcher.BackgroundColor3 = Color3.fromRGB(12,12,16); launcher.BackgroundTransparency = 0.3; launcher.BorderSizePixel = 0; launcher.ZIndex = 50; launcher.Parent = gui; corner(launcher,20); glassStroke(launcher,1,0.4)
-    local menuBtn = Instance.new("TextButton"); menuBtn.Name = "MenuButton"; menuBtn.Size = UDim2.fromOffset(34,30); menuBtn.Position = UDim2.fromOffset(4,4); menuBtn.BackgroundColor3 = ACCENT; menuBtn.BackgroundTransparency = 0.15; menuBtn.Text = "V"; menuBtn.TextColor3 = Color3.new(1,1,1); menuBtn.Font = FONT_BOLD; menuBtn.TextSize = 14; menuBtn.AutoButtonColor = false; menuBtn.ZIndex = 51; menuBtn.Parent = launcher; corner(menuBtn,16)
-    local lockBtn = Instance.new("TextButton"); lockBtn.Name = "LockButton"; lockBtn.Size = UDim2.fromOffset(64,30); lockBtn.Position = UDim2.fromOffset(44,4); lockBtn.BackgroundColor3 = OFF_COLOR; lockBtn.BackgroundTransparency = 0.2; lockBtn.Text = "Lock"; lockBtn.TextColor3 = Color3.new(1,1,1); lockBtn.Font = FONT; lockBtn.TextSize = 11; lockBtn.AutoButtonColor = false; lockBtn.ZIndex = 51; lockBtn.Parent = launcher; corner(lockBtn,16)
+    local launcher = Instance.new("Frame"); launcher.Name = "Launcher"; launcher.Size = UDim2.fromOffset(LW, LH); launcher.Position = UDim2.fromOffset(20, 120); launcher.BackgroundColor3 = Color3.fromRGB(12, 12, 16); launcher.BackgroundTransparency = 0.3; launcher.BorderSizePixel = 0; launcher.ZIndex = 50; launcher.Parent = gui; corner(launcher, 20); glassStroke(launcher, 1, 0.4)
+    local menuBtn = Instance.new("TextButton"); menuBtn.Name = "MenuButton"; menuBtn.Size = UDim2.fromOffset(34, 30); menuBtn.Position = UDim2.fromOffset(4, 4); menuBtn.BackgroundColor3 = ACCENT; menuBtn.BackgroundTransparency = 0.15; menuBtn.Text = "V"; menuBtn.TextColor3 = Color3.new(1, 1, 1); menuBtn.Font = FONT_BOLD; menuBtn.TextSize = 14; menuBtn.AutoButtonColor = false; menuBtn.ZIndex = 51; menuBtn.Parent = launcher; corner(menuBtn, 16)
+    local lockBtn = Instance.new("TextButton"); lockBtn.Name = "LockButton"; lockBtn.Size = UDim2.fromOffset(64, 30); lockBtn.Position = UDim2.fromOffset(44, 4); lockBtn.BackgroundColor3 = OFF_COLOR; lockBtn.BackgroundTransparency = 0.2; lockBtn.Text = "Lock"; lockBtn.TextColor3 = Color3.new(1, 1, 1); lockBtn.Font = FONT; lockBtn.TextSize = 11; lockBtn.AutoButtonColor = false; lockBtn.ZIndex = 51; lockBtn.Parent = launcher; corner(lockBtn, 16)
 
     local DRAG_THRESHOLD = 12
     local locked = false
@@ -967,13 +975,14 @@ if isMobile then
     local pressMoved = false
 
     local function isPointer(input)
-        return input.UserInputType == Enum.UserInputType.MouseButton1
-            or input.UserInputType == Enum.UserInputType.Touch
+        return input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch
     end
     local function beginPress(input)
         if not isPointer(input) or pressInput then return end
-        pressInput = input; pressStartInputPos = input.Position
-        pressStartPos = launcher.AbsolutePosition; pressMoved = false
+        pressInput = input
+        pressStartInputPos = input.Position
+        pressStartPos = launcher.AbsolutePosition
+        pressMoved = false
     end
     launcher.InputBegan:Connect(beginPress)
     menuBtn.InputBegan:Connect(beginPress)
@@ -982,81 +991,79 @@ if isMobile then
     UIS.InputChanged:Connect(function(input)
         if not pressInput or locked then return end
         local okMouse = pressInput.UserInputType == Enum.UserInputType.MouseButton1 and input.UserInputType == Enum.UserInputType.MouseMovement
-        local okTouch = pressInput.UserInputType == Enum.UserInputType.Touch         and input.UserInputType == Enum.UserInputType.Touch
+        local okTouch = pressInput.UserInputType == Enum.UserInputType.Touch and input.UserInputType == Enum.UserInputType.Touch
         if not (okMouse or okTouch) then return end
         local delta = input.Position - pressStartInputPos
         if delta.Magnitude > DRAG_THRESHOLD then pressMoved = true end
         if pressMoved then
             local vp = gui.AbsoluteSize
-            launcher.Position = UDim2.fromOffset(
-                math.clamp(pressStartPos.X + delta.X, 0, vp.X - LW),
-                math.clamp(pressStartPos.Y + delta.Y, 0, vp.Y - LH)
-            )
+            local x = math.clamp(pressStartPos.X + delta.X, 0, vp.X - LW)
+            local y = math.clamp(pressStartPos.Y + delta.Y, 0, vp.Y - LH)
+            launcher.Position = UDim2.fromOffset(x, y)
         end
     end)
     UIS.InputEnded:Connect(function(input)
-        if pressInput and isPointer(input) and input.UserInputType == pressInput.UserInputType then
-            pressInput = nil
-        end
+        if pressInput and isPointer(input) and input.UserInputType == pressInput.UserInputType then pressInput = nil end
     end)
+
     menuBtn.Activated:Connect(function() if pressMoved then return end; setOpen(not isOpen) end)
     lockBtn.Activated:Connect(function()
         if pressMoved then return end
         locked = not locked
         lockBtn.Text = locked and "Locked" or "Lock"
-        tween(lockBtn, 0.25, {BackgroundColor3 = locked and ACCENT or OFF_COLOR})
+        tween(lockBtn, 0.25, { BackgroundColor3 = locked and ACCENT or OFF_COLOR })
     end)
 end
 
 closeDot.MouseButton1Click:Connect(function() setOpen(false) end)
 local minimized = false
-minDot.MouseButton1Click:Connect(function()
-    minimized = not minimized
-    tween(window, 0.5, {Size = UDim2.fromOffset(WIN_W, minimized and BAR_H or WIN_H)}, Enum.EasingStyle.Quint)
-end)
-maxDot.MouseButton1Click:Connect(function()
-    minimized = false
-    tween(window, 0.5, {Size = UDim2.fromOffset(WIN_W, WIN_H)}, Enum.EasingStyle.Quint)
-end)
+minDot.MouseButton1Click:Connect(function() minimized = not minimized; tween(window, 0.5, { Size = UDim2.fromOffset(WIN_W, minimized and BAR_H or WIN_H) }, Enum.EasingStyle.Quint) end)
+maxDot.MouseButton1Click:Connect(function() minimized = false; tween(window, 0.5, { Size = UDim2.fromOffset(WIN_W, WIN_H) }, Enum.EasingStyle.Quint) end)
+
+-- RightShift hides/shows the menu (works on every device with a keyboard)
 UIS.InputBegan:Connect(function(input, processed)
     if not processed and input.KeyCode == Enum.KeyCode.RightShift then setOpen(not isOpen) end
 end)
 
--- ===== Execution Pipeline =====
+-- ===== KittyWare Execution Pipeline =====
 task.spawn(function()
     while task.wait(1) do
         local backpack = player:FindFirstChild("Backpack")
         if backpack then
-            counterTool = backpack:FindFirstChild("Prey's Peril")
-                       or backpack:FindFirstChild("Split Second Counter")
+            counterTool = backpack:FindFirstChild("Prey's Peril") or backpack:FindFirstChild("Split Second Counter")
         end
     end
 end)
 
 local animConn
 local function onCharacterAdded(char)
-    currentCharacter  = char
-    currentHumanoid   = char:WaitForChild("Humanoid")
-    currentRootPart   = char:WaitForChild("HumanoidRootPart")
-    currentCommunicate= char:WaitForChild("Communicate", 10)
-    currentAnimator   = currentHumanoid:WaitForChild("Animator", 10)
-    blockActive       = false
-    isDashOnCooldown  = false
+    currentCharacter = char
+    currentHumanoid = char:WaitForChild("Humanoid")
+    currentRootPart = char:WaitForChild("HumanoidRootPart")
+    currentCommunicate = char:WaitForChild("Communicate", 10)
+    currentAnimator = currentHumanoid:WaitForChild("Animator", 10)
+    blockActive = false
+    isDashOnCooldown = false
 
-    applyPlayerVis(char)
-    if Settings.Player.WalkSpeedEnabled then currentHumanoid.WalkSpeed = Settings.Player.WalkSpeed end
+    safe("player visuals", function()
+        PlayerFx.apply(char)
+        PlayerFx.hookDash(currentRootPart)
+        if Settings.Player.WalkSpeedEnabled then currentHumanoid.WalkSpeed = Settings.Player.WalkSpeed end
+    end)
+
     if not currentAnimator then return end
-
     if animConn then animConn:Disconnect() end
     animConn = currentAnimator.AnimationPlayed:Connect(function(track)
         local id = track.Animation.AnimationId
-        if id == "rbxassetid://"..animId4 or id == "rbxassetid://"..animId5 then
-            local lastHit   = currentCharacter:GetAttribute("LastM1Hitted")
-            local targetChar= nil
+        if id == "rbxassetid://" .. animId4 or id == "rbxassetid://" .. animId5 then
+            local lastHit = currentCharacter:GetAttribute("LastM1Hitted")
+
+            local targetChar = nil
             if lastHit then
                 local targetName = lastHit:match("^(.-);;")
                 if targetName then targetChar = liveFolder:FindFirstChild(targetName) end
             end
+
             if not targetChar or not targetChar:FindFirstChild("HumanoidRootPart") then
                 local bestDist, bestChar = 50, nil
                 for _, plr in ipairs(Players:GetPlayers()) do
@@ -1071,10 +1078,12 @@ local function onCharacterAdded(char)
                 end
                 if bestChar then targetChar = bestChar end
             end
+
             if not targetChar then return end
             local targetHrp = targetChar:FindFirstChild("HumanoidRootPart")
             local targetHum = targetChar:FindFirstChild("Humanoid")
             if not targetHrp or not targetHum then return end
+
             task.wait(math.max(0, 0.38 - pingScaledDelay(1000)))
             if Settings.AutoTech.Enabled and not isDashOnCooldown then
                 local handler = TECH_HANDLERS[Settings.AutoTech.Tech]
@@ -1084,15 +1093,19 @@ local function onCharacterAdded(char)
     end)
 end
 
+-- Enemy tracking for autoblock
 local hookedModels = setmetatable({}, { __mode = "k" })
 local function hookModel(model)
     if not model or model == player.Character or hookedModels[model] then return end
     hookedModels[model] = model.DescendantAdded:Connect(function(desc)
-        if Settings.Autoblock.Enabled then task.spawn(watchEnemyModel, desc) end
+        if Settings.Autoblock.Enabled then
+            task.spawn(watchEnemyModel, desc)
+        end
     end)
     model.AncestryChanged:Connect(function(_, parent)
         if not parent and hookedModels[model] then
-            hookedModels[model]:Disconnect(); hookedModels[model] = nil
+            hookedModels[model]:Disconnect()
+            hookedModels[model] = nil
         end
     end)
 end
